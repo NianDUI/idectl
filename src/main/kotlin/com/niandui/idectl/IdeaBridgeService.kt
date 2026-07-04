@@ -133,7 +133,7 @@ class IdeaBridgeService(val scope: CoroutineScope) : Disposable {
             notifyReady(token)
         } catch (t: Throwable) {
             started.set(false)
-            thisLogger().error("failed to start IdeaBridge server", t)
+            thisLogger().error("failed to start idectl server", t)
         }
     }
 

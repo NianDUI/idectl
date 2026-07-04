@@ -65,7 +65,7 @@ class McpTransportAdapter(private val app: IdeaBridgeService) {
             })
             addProperty(
                 "instructions",
-                "IdeaBridge controls this IntelliJ IDEA: run/restart configurations (run↔debug), " +
+                "idectl controls this IntelliJ IDEA: run/restart configurations (run↔debug), " +
                     "read & grep live console logs, build, and hot-reload. Call get_ide_state first.",
             )
         }

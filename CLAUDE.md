@@ -7,8 +7,8 @@ breakpoint debugging, project / run-config / SDK management, and scoped multi-to
 - **Plugin id / Kotlin package**: `com.niandui.idectl`
 - **Display name** (Settings / Plugins list): “IDE Control”
 - **MCP server name** (what agents register): `idectl`
-- History: was “Agent MCP Bridge / idea-bridge”; class names (`IdeaBridge*`, `Bridge*`) and the local
-  project dir may still read `idea-bridge` — that is intentional, not a leftover to “fix”.
+- History: was “Agent MCP Bridge / idea-bridge”. Kotlin **class names** (`IdeaBridge*`, `Bridge*`) are
+  kept as-is intentionally — not a leftover to “fix”.
 
 ## Build & run
 
