@@ -14,10 +14,10 @@ breakpoint debugging, project / run-config / SDK management, and scoped multi-to
 
 Use the helper script (a thin wrapper over Gradle):
 
-- `./ideabridge.sh build` — build the plugin zip → `build/distributions/idectl-<ver>.zip`
-- `./ideabridge.sh deploy` — build + install/replace into everyday IntelliJ IDEA (**restart IDEA to load**)
-- `./ideabridge.sh run --token <t> --project <path>` — sandbox IDE for debugging (`runIde`)
-- `./ideabridge.sh -h` — full usage
+- `./idectl.sh build` — build the plugin zip → `build/distributions/idectl-<ver>.zip`
+- `./idectl.sh deploy` — build + install/replace into everyday IntelliJ IDEA (**restart IDEA to load**)
+- `./idectl.sh run --token <t> --project <path>` — sandbox IDE for debugging (`runIde`)
+- `./idectl.sh -h` — full usage
 
 Toolchain: **JDK 21**, Gradle 9, IntelliJ Platform Gradle plugin 2.x, Kotlin 2.3.x. Target is
 **IntelliJ IDEA 2026.x only** (`sinceBuild = 261`, no upper bound).

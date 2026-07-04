@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# IdeaBridge 辅助脚本：构建 / 部署到日常 IDEA / 沙箱调试。
-# 用 `./ideabridge.sh -h` 查看用法。
+# idectl 辅助脚本：构建 / 部署到日常 IDEA / 沙箱调试。
+# 用 `./idectl.sh -h` 查看用法。
 set -eo pipefail
 
 # 始终以脚本所在目录(工程根)为工作目录，随处调用都行。
@@ -8,10 +8,10 @@ cd "$(dirname "$0")"
 
 usage() {
   cat <<'EOF'
-IdeaBridge —— 构建 / 部署 / 调试 辅助脚本
+idectl —— 构建 / 部署 / 调试 辅助脚本
 
 用法：
-  ./ideabridge.sh <命令> [选项]
+  ./idectl.sh <命令> [选项]
 
 命令：
   build                构建插件 zip → build/distributions/idectl-<版本>.zip
@@ -29,10 +29,10 @@ run 选项：
   --project <路径>     启动时打开的项目路径
 
 示例：
-  ./ideabridge.sh build
-  ./ideabridge.sh deploy
-  ./ideabridge.sh deploy --ide-dir "$HOME/Library/Application Support/JetBrains/IntelliJIdea2025.3"
-  ./ideabridge.sh run --token smoketoken123 --project /Users/me/proj
+  ./idectl.sh build
+  ./idectl.sh deploy
+  ./idectl.sh deploy --ide-dir "$HOME/Library/Application Support/JetBrains/IntelliJIdea2025.3"
+  ./idectl.sh run --token smoketoken123 --project /Users/me/proj
 
 说明：
   · deploy 会删掉旧的 plugins/idectl 再解包新版；运行中的 IDE 只在【重启】后加载新版。
