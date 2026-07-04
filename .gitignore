@@ -4,7 +4,7 @@
 /build/
 .idea/
 *.iml
-out/
+/out/
 .DS_Store
 .intellijPlatform/
 .kotlin/
