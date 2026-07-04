@@ -3,7 +3,7 @@ package com.niandui.idectl.tools.config
 import com.intellij.execution.RunManager
 import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.openapi.application.EDT
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.session.Role
 import com.niandui.idectl.tools.ErrorCodes
 import com.niandui.idectl.tools.Schema
@@ -47,7 +47,7 @@ class CreateRunConfigurationTool : Tool {
     override suspend fun execute(ctx: ToolContext): ToolCallResult {
         val project = ctx.project!!
         val type = ctx.args.str("type") ?: "application"
-        val launcher = BridgeProjectService.getInstance(project).launcher
+        val launcher = IdectlProjectService.getInstance(project).launcher
 
         val settings: RunnerAndConfigurationSettings = when (type) {
             "application" -> {

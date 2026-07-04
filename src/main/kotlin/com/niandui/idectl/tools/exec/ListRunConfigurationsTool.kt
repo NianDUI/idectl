@@ -5,7 +5,7 @@ import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.openapi.application.readAction
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.session.Role
 import com.niandui.idectl.tools.Schema
 import com.niandui.idectl.tools.Tool
@@ -34,7 +34,7 @@ class ListRunConfigurationsTool : Tool {
         val project = ctx.project!!
         val typeId = ctx.args.str("type_id")
         val nameContains = ctx.args.str("name_contains")
-        val launcher = BridgeProjectService.getInstance(project).launcher
+        val launcher = IdectlProjectService.getInstance(project).launcher
 
         val settingsList = launcher.listConfigurations(typeId, nameContains)
         val items: List<JsonObject> = readAction {

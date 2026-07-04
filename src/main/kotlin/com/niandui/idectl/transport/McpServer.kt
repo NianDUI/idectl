@@ -3,8 +3,8 @@ package com.niandui.idectl.transport
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.intellij.openapi.diagnostic.thisLogger
-import com.niandui.idectl.IdeaBridge
-import com.niandui.idectl.IdeaBridgeService
+import com.niandui.idectl.Idectl
+import com.niandui.idectl.IdectlService
 import com.niandui.idectl.session.McpSession
 import com.niandui.idectl.session.Principal
 import io.ktor.http.ContentType
@@ -29,7 +29,7 @@ import java.net.ServerSocket
  * Ktor CIO embedded server bound to 127.0.0.1 (L1). Single `/mcp` endpoint, Streamable-HTTP:
  * POST carries JSON-RPC; GET is unsupported (405, no server-initiated SSE yet); DELETE ends a session.
  */
-class McpServer(private val app: IdeaBridgeService) {
+class McpServer(private val app: IdectlService) {
 
     @Volatile var port: Int = -1
         private set
@@ -37,7 +37,7 @@ class McpServer(private val app: IdeaBridgeService) {
     private var stopFn: (() -> Unit)? = null
 
     fun start(portBase: Int) {
-        val chosen = findFreePort(portBase, IdeaBridge.PORT_SCAN_LIMIT)
+        val chosen = findFreePort(portBase, Idectl.PORT_SCAN_LIMIT)
         val server = embeddedServer(CIO, host = "127.0.0.1", port = chosen) { installRouting() }
         server.start(wait = false)
         port = chosen

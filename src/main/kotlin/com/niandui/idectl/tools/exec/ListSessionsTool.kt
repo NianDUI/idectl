@@ -1,7 +1,7 @@
 package com.niandui.idectl.tools.exec
 
 import com.niandui.idectl.core.exec.ExecState
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.session.Role
 import com.niandui.idectl.tools.Schema
 import com.niandui.idectl.tools.Tool
@@ -28,7 +28,7 @@ class ListSessionsTool : Tool {
     override suspend fun execute(ctx: ToolContext): ToolCallResult {
         val project = ctx.project!!
         val stateFilter = ctx.args.str("state") ?: "running"
-        val executions = BridgeProjectService.getInstance(project).executions
+        val executions = IdectlProjectService.getInstance(project).executions
 
         val all = executions.list(includeTerminated = stateFilter != "running")
         val filtered = when (stateFilter) {

@@ -13,7 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 
 /** Per-project domain services: the execution registry, launcher, build service, and debugger (L5). */
 @Service(Service.Level.PROJECT)
-class BridgeProjectService(val project: Project, val scope: CoroutineScope) : Disposable {
+class IdectlProjectService(val project: Project, val scope: CoroutineScope) : Disposable {
 
     val executions = ExecutionRegistry(project, scope)
     val launcher = RunLauncher(project, executions)
@@ -29,6 +29,6 @@ class BridgeProjectService(val project: Project, val scope: CoroutineScope) : Di
     }
 
     companion object {
-        fun getInstance(project: Project): BridgeProjectService = project.service()
+        fun getInstance(project: Project): IdectlProjectService = project.service()
     }
 }

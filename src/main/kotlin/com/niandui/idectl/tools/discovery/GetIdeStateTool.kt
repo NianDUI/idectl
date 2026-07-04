@@ -6,7 +6,7 @@ import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.project.Project
-import com.niandui.idectl.IdeaBridge
+import com.niandui.idectl.Idectl
 import com.niandui.idectl.gate.ProjectResolver
 import com.niandui.idectl.session.Role
 import com.niandui.idectl.tools.Schema
@@ -43,8 +43,8 @@ class GetIdeStateTool : Tool {
         val result = jObj {
             addProperty("ideVersion", appInfo.fullVersion)
             addProperty("ideName", appInfo.fullApplicationName)
-            addProperty("pluginVersion", IdeaBridge.pluginVersion())
-            add("protocolVersions", JsonArray().apply { IdeaBridge.SUPPORTED_PROTOCOLS.forEach { add(it) } })
+            addProperty("pluginVersion", Idectl.pluginVersion())
+            add("protocolVersions", JsonArray().apply { Idectl.SUPPORTED_PROTOCOLS.forEach { add(it) } })
             addProperty("port", ctx.app.server.port)
             add("openProjects", jArr(projectsJson))
             add("me", jObj {

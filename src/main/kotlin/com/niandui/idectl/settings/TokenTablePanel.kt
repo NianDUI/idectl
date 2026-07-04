@@ -89,7 +89,7 @@ class TokenTablePanel {
         }
     }
 
-    fun reset(settings: BridgeSettings) {
+    fun reset(settings: IdectlSettings) {
         rows.clear()
         settings.tokens.forEach {
             rows.add(TokenRow(it.token ?: "", it.subject ?: "", it.role ?: "viewer", it.projects.toList()))
@@ -101,7 +101,7 @@ class TokenTablePanel {
     /** Only "modified" if the user touched the table — untouched dialogs must not overwrite runtime tokens. */
     fun isModified(): Boolean = dirty
 
-    fun apply(settings: BridgeSettings) {
+    fun apply(settings: IdectlSettings) {
         if (!dirty) return
         settings.tokens.clear()
         rows.forEach { r ->

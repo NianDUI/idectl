@@ -3,7 +3,7 @@ package com.niandui.idectl.gate
 import com.google.gson.JsonObject
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
-import com.niandui.idectl.IdeaBridgeService
+import com.niandui.idectl.IdectlService
 import com.niandui.idectl.session.McpSession
 import com.niandui.idectl.session.Principal
 import com.niandui.idectl.tools.ErrorCodes
@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
  * authorization → execute → audit. Centralizing this is what keeps authorization from being
  * scattered and forgotten (D4/D8).
  */
-class ToolGate(private val app: IdeaBridgeService) {
+class ToolGate(private val app: IdectlService) {
 
     suspend fun dispatch(tool: Tool, session: McpSession, args: JsonObject): ToolCallResult {
         val principal = session.principal

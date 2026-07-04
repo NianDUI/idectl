@@ -34,11 +34,11 @@ class ToolPolicy : BaseState() {
  */
 @Service(Service.Level.APP)
 @State(name = "IdectlSettings", storages = [Storage("idectl.xml")])
-class BridgeSettings : SimplePersistentStateComponent<BridgeSettings.State>(State()) {
+class IdectlSettings : SimplePersistentStateComponent<IdectlSettings.State>(State()) {
 
     class State : BaseState() {
         var enabled: Boolean by property(true)
-        var portBase: Int by property(com.niandui.idectl.IdeaBridge.PORT_BASE)
+        var portBase: Int by property(com.niandui.idectl.Idectl.PORT_BASE)
         var token: String? by string()
 
         // Console buffering (core②). Frugal on RAM: the memory ring stays small and evicted lines
@@ -115,6 +115,6 @@ class BridgeSettings : SimplePersistentStateComponent<BridgeSettings.State>(Stat
     fun resetToolPolicies() { state.toolPolicies.clear() }
 
     companion object {
-        fun getInstance(): BridgeSettings = service()
+        fun getInstance(): IdectlSettings = service()
     }
 }

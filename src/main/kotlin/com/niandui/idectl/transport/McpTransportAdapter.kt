@@ -3,8 +3,8 @@ package com.niandui.idectl.transport
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.intellij.openapi.diagnostic.thisLogger
-import com.niandui.idectl.IdeaBridge
-import com.niandui.idectl.IdeaBridgeService
+import com.niandui.idectl.Idectl
+import com.niandui.idectl.IdectlService
 import com.niandui.idectl.session.McpSession
 import com.niandui.idectl.tools.ToolCallResult
 import kotlinx.coroutines.CancellationException
@@ -14,7 +14,7 @@ import kotlinx.coroutines.CancellationException
  * negotiation) lives here so the rest of the plugin never depends on a transport SDK; this is
  * the isolation boundary D1 mandates. We speak Streamable-HTTP JSON-RPC by hand for now.
  */
-class McpTransportAdapter(private val app: IdeaBridgeService) {
+class McpTransportAdapter(private val app: IdectlService) {
 
     /** Dispatch one message. Returns a JSON-RPC response object for requests, null for notifications. */
     suspend fun handle(incoming: RpcIncoming, session: McpSession): JsonObject? = when (incoming) {
@@ -49,8 +49,8 @@ class McpTransportAdapter(private val app: IdeaBridgeService) {
 
     private fun initialize(params: JsonObject?, session: McpSession): JsonObject {
         val requested = params.str("protocolVersion")
-        val negotiated = if (requested != null && requested in IdeaBridge.SUPPORTED_PROTOCOLS) requested
-        else IdeaBridge.PROTOCOL_VERSION
+        val negotiated = if (requested != null && requested in Idectl.SUPPORTED_PROTOCOLS) requested
+        else Idectl.PROTOCOL_VERSION
         session.protocolVersion = negotiated
         val client = params.obj("clientInfo")
         session.clientInfo = client?.let { "${it.str("name")}/${it.str("version")}" }
@@ -60,8 +60,8 @@ class McpTransportAdapter(private val app: IdeaBridgeService) {
                 add("tools", jObj { addProperty("listChanged", false) })
             })
             add("serverInfo", jObj {
-                addProperty("name", IdeaBridge.SERVER_NAME)
-                addProperty("version", IdeaBridge.pluginVersion())
+                addProperty("name", Idectl.SERVER_NAME)
+                addProperty("version", Idectl.pluginVersion())
             })
             addProperty(
                 "instructions",

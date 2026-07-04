@@ -5,16 +5,16 @@ import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
-import com.niandui.idectl.IdeaBridgeService
+import com.niandui.idectl.IdectlService
 import java.awt.BorderLayout
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
 
 /** 设置 | 工具 | IDE Control —— 端口、启用开关、访问令牌、控制台缓冲。 */
-class BridgeConfigurable : Configurable {
+class IdectlConfigurable : Configurable {
 
-    private val settings get() = BridgeSettings.getInstance()
+    private val settings get() = IdectlSettings.getInstance()
 
     private val enabledCheck = JBCheckBox("启用 IDE Control 服务器")
     private val portField = JBTextField(8)
@@ -42,7 +42,7 @@ class BridgeConfigurable : Configurable {
 
     override fun createComponent(): JComponent {
         regenerateButton.addActionListener {
-            tokenField.text = IdeaBridgeService.getInstance().tokenStore.regenerate()
+            tokenField.text = IdectlService.getInstance().tokenStore.regenerate()
         }
         val tokenRow = JPanel(BorderLayout(6, 0)).apply {
             add(tokenField, BorderLayout.CENTER)

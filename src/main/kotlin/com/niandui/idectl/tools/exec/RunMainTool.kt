@@ -1,7 +1,7 @@
 package com.niandui.idectl.tools.exec
 
 import com.google.gson.JsonNull
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.session.Role
 import com.niandui.idectl.tools.ErrorCodes
 import com.niandui.idectl.tools.Schema
@@ -52,7 +52,7 @@ class RunMainTool : Tool {
         val timeoutSec = ctx.args.int("timeout_sec", 120).coerceIn(1, 3600)
         val tailLines = ctx.args.int("tail_lines", 30).coerceIn(0, 2000)
 
-        val launcher = BridgeProjectService.getInstance(project).launcher
+        val launcher = IdectlProjectService.getInstance(project).launcher
         val settings = launcher.createApplication(className, programArgs, vmOptions)
         val record = launcher.launch(
             settings = settings,

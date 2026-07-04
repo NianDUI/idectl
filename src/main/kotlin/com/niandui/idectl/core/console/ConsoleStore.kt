@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Tuning for one session's console buffers. [archiveDir] null → memory-only (no disk spill).
- * Built from [com.niandui.idectl.settings.BridgeSettings] per launch, so config changes apply to
+ * Built from [com.niandui.idectl.settings.IdectlSettings] per launch, so config changes apply to
  * newly started sessions without touching already-running ones.
  */
 class ConsoleConfig(

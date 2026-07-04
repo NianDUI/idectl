@@ -1,6 +1,6 @@
 package com.niandui.idectl.tools.debug
 
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.session.Role
 import com.niandui.idectl.tools.ErrorCodes
 import com.niandui.idectl.tools.Schema
@@ -40,7 +40,7 @@ class SetBreakpointTool : Tool {
         val enabled = ctx.args.bool("enabled", true)
         val condition = ctx.args.str("condition")
 
-        val bp = BridgeProjectService.getInstance(project).debug.setBreakpoint(file, line, enabled, condition)
+        val bp = IdectlProjectService.getInstance(project).debug.setBreakpoint(file, line, enabled, condition)
         return ToolCallResult.ok(jObj { add("breakpoint", DebugSupport.bpJson(bp)) })
     }
 }

@@ -2,14 +2,14 @@ package com.niandui.idectl.tools
 
 import com.google.gson.JsonObject
 import com.intellij.openapi.project.Project
-import com.niandui.idectl.IdeaBridgeService
+import com.niandui.idectl.IdectlService
 import com.niandui.idectl.session.McpSession
 import com.niandui.idectl.session.Principal
 import com.niandui.idectl.session.Role
 
 /** Everything a tool handler needs. `project` is resolved and authorized by the gate (D4). */
 class ToolContext(
-    val app: IdeaBridgeService,
+    val app: IdectlService,
     val principal: Principal,
     val session: McpSession,
     /** Resolved target project, or null for project-agnostic tools. */

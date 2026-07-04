@@ -12,7 +12,7 @@ import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.tree.TreeUtil
-import com.niandui.idectl.IdeaBridgeService
+import com.niandui.idectl.IdectlService
 import com.niandui.idectl.tools.Tool
 import com.niandui.idectl.tools.ToolGroups
 import java.awt.BorderLayout
@@ -44,7 +44,7 @@ class ToolPolicyPanel {
     }
 
     private val tools: List<Tool> =
-        runCatching { IdeaBridgeService.getInstance().registry.all().toList() }.getOrDefault(emptyList())
+        runCatching { IdectlService.getInstance().registry.all().toList() }.getOrDefault(emptyList())
     private val working = LinkedHashMap<String, Working>()
     private val toolNodes = LinkedHashMap<String, CheckedTreeNode>()
     private val groupNodes = mutableListOf<Pair<CheckedTreeNode, List<String>>>()
@@ -270,7 +270,7 @@ class ToolPolicyPanel {
 
     fun isModified(): Boolean = dirty
 
-    fun apply(settings: BridgeSettings) {
+    fun apply(settings: IdectlSettings) {
         if (!dirty) return
         settings.toolPolicies.clear()
         working.forEach { (name, w) ->
@@ -286,7 +286,7 @@ class ToolPolicyPanel {
         dirty = false
     }
 
-    fun reset(settings: BridgeSettings) {
+    fun reset(settings: IdectlSettings) {
         tools.forEach {
             working[it.name] = Working(
                 disabled = settings.isToolDisabled(it.name),

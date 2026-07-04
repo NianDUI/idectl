@@ -7,7 +7,7 @@ import com.niandui.idectl.core.console.Stream
 import com.niandui.idectl.core.exec.ExecState
 import com.niandui.idectl.core.exec.ExecutionRecord
 import com.niandui.idectl.gate.ProjectResolver
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.transport.jObj
 
 /** Session lookup + JSON rendering shared by the execution/console tools. */
@@ -16,7 +16,7 @@ object Sessions {
     /** Find a session across all open projects (session ids are globally unique). */
     fun find(sessionId: String): Pair<Project, ExecutionRecord>? {
         for (p in ProjectResolver.openProjects()) {
-            val record = BridgeProjectService.getInstance(p).executions.find(sessionId)
+            val record = IdectlProjectService.getInstance(p).executions.find(sessionId)
             if (record != null) return p to record
         }
         return null

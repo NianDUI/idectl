@@ -1,7 +1,7 @@
 package com.niandui.idectl.tools.exec
 
 import com.niandui.idectl.core.console.Stream
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.session.Role
 import com.niandui.idectl.tools.ErrorCodes
 import com.niandui.idectl.tools.Schema
@@ -40,7 +40,7 @@ class StopSessionTool : Tool {
 
         val (project, record) = Sessions.find(sessionId)
             ?: throw ToolException(ErrorCodes.NOT_FOUND, "no session $sessionId", "call list_sessions")
-        val launcher = BridgeProjectService.getInstance(project).launcher
+        val launcher = IdectlProjectService.getInstance(project).launcher
 
         val result = launcher.stop(record, force, timeoutSec * 1000L)
 

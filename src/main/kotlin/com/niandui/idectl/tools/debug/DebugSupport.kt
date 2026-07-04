@@ -7,7 +7,7 @@ import com.niandui.idectl.core.debug.DebugSessionHandle
 import com.niandui.idectl.core.debug.FrameInfo
 import com.niandui.idectl.core.debug.VarInfo
 import com.niandui.idectl.core.exec.ExecutionRecord
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.tools.ErrorCodes
 import com.niandui.idectl.tools.ToolException
 import com.niandui.idectl.tools.exec.Sessions
@@ -20,7 +20,7 @@ object DebugSupport {
     fun handle(sessionId: String): Pair<ExecutionRecord, DebugSessionHandle> {
         val (project, record) = Sessions.find(sessionId)
             ?: throw ToolException(ErrorCodes.NOT_FOUND, "no session $sessionId", "call list_sessions")
-        val handle = BridgeProjectService.getInstance(project).debug.handleFor(record)
+        val handle = IdectlProjectService.getInstance(project).debug.handleFor(record)
         return record to handle
     }
 

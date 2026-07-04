@@ -4,7 +4,7 @@ import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.extensions.PluginId
 
 /** Global constants and small helpers shared across layers. */
-object IdeaBridge {
+object Idectl {
     const val PLUGIN_ID = "com.niandui.idectl"
 
     /** L1 transport: first port tried; increments until free (avoids built-in MCP 64342±240). D3. */

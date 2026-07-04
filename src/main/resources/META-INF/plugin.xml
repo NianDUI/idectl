@@ -18,24 +18,24 @@
     <depends>JUnit</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <postStartupActivity implementation="com.niandui.idectl.BridgeBootstrap"/>
+        <postStartupActivity implementation="com.niandui.idectl.IdectlBootstrap"/>
         <applicationConfigurable
             parentId="tools"
-            instance="com.niandui.idectl.settings.BridgeConfigurable"
-            id="com.niandui.idectl.settings.BridgeConfigurable"
+            instance="com.niandui.idectl.settings.IdectlConfigurable"
+            id="com.niandui.idectl.settings.IdectlConfigurable"
             displayName="IDE Control"/>
         <notificationGroup id="IDE Control" displayType="BALLOON"/>
     </extensions>
 
     <!-- Start the server at IDE startup (reachable even with no project open). -->
     <applicationListeners>
-        <listener class="com.niandui.idectl.BridgeAppListener"
+        <listener class="com.niandui.idectl.IdectlAppListener"
                   topic="com.intellij.ide.AppLifecycleListener"/>
     </applicationListeners>
 
     <!-- Declarative subscription: live from IDE start, so user-launched sessions are captured too. -->
     <projectListeners>
-        <listener class="com.niandui.idectl.core.exec.BridgeExecutionListener"
+        <listener class="com.niandui.idectl.core.exec.IdectlExecutionListener"
                   topic="com.intellij.execution.ExecutionListener"/>
     </projectListeners>
 </idea-plugin>

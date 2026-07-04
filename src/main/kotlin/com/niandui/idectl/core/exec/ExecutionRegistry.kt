@@ -10,7 +10,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.niandui.idectl.core.console.ConsoleConfig
 import com.niandui.idectl.core.console.ConsoleStore
-import com.niandui.idectl.settings.BridgeSettings
+import com.niandui.idectl.settings.IdectlSettings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Per-project registry of execution sessions (core① geodata). Fed by the declarative
- * [BridgeExecutionListener] so it captures user-launched sessions too. The console listener is
+ * [IdectlExecutionListener] so it captures user-launched sessions too. The console listener is
  * attached in `processStarting` — before `startNotify()` — for zero-loss output (D6/R03).
  */
 class ExecutionRegistry(
@@ -125,7 +125,7 @@ class ExecutionRegistry(
 
     /** Build per-session console tuning from current settings; archive dir lives under the IDE temp path. */
     private fun consoleConfig(sessionId: String): ConsoleConfig {
-        val s = BridgeSettings.getInstance()
+        val s = IdectlSettings.getInstance()
         val archiveDir = if (s.consoleArchiveEnabled) {
             Paths.get(PathManager.getTempPath(), "idectl-console", sessionId)
         } else {

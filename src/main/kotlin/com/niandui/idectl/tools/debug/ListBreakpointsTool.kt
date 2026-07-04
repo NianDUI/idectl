@@ -1,6 +1,6 @@
 package com.niandui.idectl.tools.debug
 
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.session.Role
 import com.niandui.idectl.tools.Schema
 import com.niandui.idectl.tools.Tool
@@ -22,7 +22,7 @@ class ListBreakpointsTool : Tool {
 
     override suspend fun execute(ctx: ToolContext): ToolCallResult {
         val project = ctx.project!!
-        val bps = BridgeProjectService.getInstance(project).debug.listBreakpoints()
+        val bps = IdectlProjectService.getInstance(project).debug.listBreakpoints()
         return ToolCallResult.ok(jObj {
             add("breakpoints", jArr(bps.map { DebugSupport.bpJson(it) }))
             addProperty("count", bps.size)

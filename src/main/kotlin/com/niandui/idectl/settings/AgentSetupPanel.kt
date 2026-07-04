@@ -3,7 +3,7 @@ package com.niandui.idectl.settings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.ui.components.JBLabel
-import com.niandui.idectl.IdeaBridgeService
+import com.niandui.idectl.IdectlService
 import java.awt.FlowLayout
 import javax.swing.BoxLayout
 import javax.swing.JButton
@@ -52,7 +52,7 @@ class AgentSetupPanel {
 
     /** Live port + admin access token, read on the EDT at click time. */
     private fun portAndToken(): Pair<Int, String> {
-        val svc = IdeaBridgeService.getInstance()
+        val svc = IdectlService.getInstance()
         val port = svc.server.port.takeIf { it > 0 } ?: svc.settings.portBase
         val token = svc.settings.token ?: svc.tokenStore.ensureToken()
         return port to token

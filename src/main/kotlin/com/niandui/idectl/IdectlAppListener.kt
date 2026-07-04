@@ -3,8 +3,8 @@ package com.niandui.idectl
 import com.intellij.ide.AppLifecycleListener
 
 /** Starts the MCP server at IDE startup, so it is reachable even on the welcome screen (no project). */
-class BridgeAppListener : AppLifecycleListener {
+class IdectlAppListener : AppLifecycleListener {
     override fun appFrameCreated(commandLineArgs: MutableList<String>) {
-        IdeaBridgeService.getInstance().ensureStarted()
+        IdectlService.getInstance().ensureStarted()
     }
 }

@@ -5,14 +5,14 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 
 /**
  * Declarative (plugin.xml projectListeners) subscriber to ExecutionManager.EXECUTION_TOPIC.
  * Because it is declarative it is live from IDE start — so user-launched sessions are captured too
  * (core①). The zero-loss console attach happens in [onProcessStarting] before startNotify (R03).
  */
-class BridgeExecutionListener : ExecutionListener {
+class IdectlExecutionListener : ExecutionListener {
 
     override fun processStarting(executorId: String, env: ExecutionEnvironment, handler: ProcessHandler) {
         registry(env)?.onProcessStarting(executorId, env, handler)
@@ -32,7 +32,7 @@ class BridgeExecutionListener : ExecutionListener {
 
     private fun registry(env: ExecutionEnvironment): ExecutionRegistry? = try {
         val project = env.project
-        if (project.isDisposed) null else project.service<BridgeProjectService>().executions
+        if (project.isDisposed) null else project.service<IdectlProjectService>().executions
     } catch (t: Throwable) {
         thisLogger().warn("failed to route execution event", t)
         null

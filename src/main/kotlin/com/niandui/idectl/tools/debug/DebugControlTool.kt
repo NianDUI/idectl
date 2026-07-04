@@ -1,7 +1,7 @@
 package com.niandui.idectl.tools.debug
 
 import com.niandui.idectl.core.debug.DebugAction
-import com.niandui.idectl.project.BridgeProjectService
+import com.niandui.idectl.project.IdectlProjectService
 import com.niandui.idectl.session.Role
 import com.niandui.idectl.tools.ErrorCodes
 import com.niandui.idectl.tools.Schema
@@ -60,7 +60,7 @@ class DebugControlTool : Tool {
 
         val (project, record) = Sessions.find(sessionId)
             ?: throw ToolException(ErrorCodes.NOT_FOUND, "no session $sessionId", "call list_sessions")
-        val controller = BridgeProjectService.getInstance(project).debug
+        val controller = IdectlProjectService.getInstance(project).debug
         val handle = controller.handleFor(record)
 
         var runToFile: com.intellij.openapi.vfs.VirtualFile? = null

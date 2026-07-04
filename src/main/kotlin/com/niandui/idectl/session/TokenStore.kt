@@ -1,15 +1,15 @@
 package com.niandui.idectl.session
 
-import com.niandui.idectl.settings.BridgeSettings
+import com.niandui.idectl.settings.IdectlSettings
 import com.niandui.idectl.settings.TokenEntry
 import java.security.SecureRandom
 
 /**
- * Token store (M3). The primary token in [BridgeSettings.token] is always an admin over all projects
+ * Token store (M3). The primary token in [IdectlSettings.token] is always an admin over all projects
  * (unchanged from M0). On top of it, any number of additional scoped tokens can be issued, each
  * carrying its own role + allowed-projects set, so different agents get different privileges.
  */
-class TokenStore(private val settings: BridgeSettings) {
+class TokenStore(private val settings: IdectlSettings) {
 
     /** Ensure the primary admin token exists; generate and persist one on first run. */
     fun ensureToken(): String {

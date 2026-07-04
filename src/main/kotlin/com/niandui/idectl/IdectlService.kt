@@ -14,7 +14,7 @@ import com.niandui.idectl.gate.ProjectResolver
 import com.niandui.idectl.gate.ToolGate
 import com.niandui.idectl.session.SessionManager
 import com.niandui.idectl.session.TokenStore
-import com.niandui.idectl.settings.BridgeSettings
+import com.niandui.idectl.settings.IdectlSettings
 import com.niandui.idectl.tools.ToolRegistry
 import com.niandui.idectl.tools.admin.CreateTokenTool
 import com.niandui.idectl.tools.admin.ListTokensTool
@@ -60,9 +60,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * tool registry and gate, and the instance-discovery registry. Started lazily on first project open.
  */
 @Service(Service.Level.APP)
-class IdeaBridgeService(val scope: CoroutineScope) : Disposable {
+class IdectlService(val scope: CoroutineScope) : Disposable {
 
-    val settings: BridgeSettings get() = BridgeSettings.getInstance()
+    val settings: IdectlSettings get() = IdectlSettings.getInstance()
     val audit: AuditService get() = service()
 
     val tokenStore = TokenStore(settings)
@@ -167,6 +167,6 @@ class IdeaBridgeService(val scope: CoroutineScope) : Disposable {
     }
 
     companion object {
-        fun getInstance(): IdeaBridgeService = service()
+        fun getInstance(): IdectlService = service()
     }
 }
