@@ -1,0 +1,41 @@
+<idea-plugin>
+    <id>com.niandui.idectl</id>
+    <name>IDE Control</name>
+    <vendor email="experiwylie@gmail.com">lyd</vendor>
+
+    <description><![CDATA[
+        Embeds an MCP (Model Context Protocol) server inside IntelliJ IDEA so AI agents such as
+        Claude Code can control the IDE: re-run running programs (switching between Run and Debug),
+        read and grep the live console logs of running programs, build, and hot-reload changes into
+        a debugged JVM.<br/>
+        <br/>
+        The server binds to <code>127.0.0.1</code> only. Port and access token are configurable in
+        <i>Settings | Tools | IDE Control</i>.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+    <depends>JUnit</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="com.niandui.idectl.BridgeBootstrap"/>
+        <applicationConfigurable
+            parentId="tools"
+            instance="com.niandui.idectl.settings.BridgeConfigurable"
+            id="com.niandui.idectl.settings.BridgeConfigurable"
+            displayName="IDE Control"/>
+        <notificationGroup id="IDE Control" displayType="BALLOON"/>
+    </extensions>
+
+    <!-- Start the server at IDE startup (reachable even with no project open). -->
+    <applicationListeners>
+        <listener class="com.niandui.idectl.BridgeAppListener"
+                  topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
+
+    <!-- Declarative subscription: live from IDE start, so user-launched sessions are captured too. -->
+    <projectListeners>
+        <listener class="com.niandui.idectl.core.exec.BridgeExecutionListener"
+                  topic="com.intellij.execution.ExecutionListener"/>
+    </projectListeners>
+</idea-plugin>
