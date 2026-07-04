@@ -1,139 +1,141 @@
-# IDEA Bridge
+# idectl (IDE Control)
 
-An IntelliJ IDEA plugin that exposes the IDE's **Build** and **Run/Debug** capabilities over a
-local **HTTP API** and an embedded **MCP (Model Context Protocol) server**, so external tools such
-as **Claude Code** can drive the IDE: trigger builds, launch run/test configurations, stream console
-logs, and control debug sessions.
+An IntelliJ IDEA plugin that embeds an **MCP (Model Context Protocol) server** so AI coding agents —
+**Claude Code**, **Codex** — can drive the IDE: run & debug configurations (switch run↔debug in place),
+read and `grep` live console output, build, hot-reload changed classes, set breakpoints and inspect a
+paused program, manage projects / run configs / SDKs, and hand different agents scoped, role-limited
+access.
 
-The three screenshots this was built from map to the three capability groups:
+The server speaks Streamable-HTTP JSON-RPC, binds to `127.0.0.1` only, and is guarded by a Bearer
+token. Everything is configured under **Settings → Tools → IDE Control**.
 
-| IDE feature                                   | Capability                                   | HTTP / MCP                          |
-| --------------------------------------------- | -------------------------------------------- | ----------------------------------- |
-| **Build** menu (project / module / file)      | make / rebuild / build module / recompile    | `POST /api/build` · tool `build`    |
-| **Run/Debug** config selector                 | list & launch run/test configs               | `POST /api/run` · tool `run`        |
-| **Debug session** toolbar + console           | read logs, stop, resume/pause/step           | `/api/sessions/...` · session tools |
-
-The server binds to `127.0.0.1` only. Port + optional token: **Settings → Tools → IDEA Bridge**.
+- **Plugin id / Kotlin package**: `com.niandui.idectl` · **MCP server name**: `idectl`
+- **Target**: IntelliJ IDEA **2026.x** only (Ultimate or Community)
 
 ---
 
-## Build & install
+## Install
 
-Requires JDK 17 or 21 available on the machine (both are auto-detected by Gradle).
-
-```bash
-cd idectl
-./gradlew buildPlugin          # produces build/distributions/idectl-1.0.0.zip
-```
-
-Install the zip in IDEA: **Settings → Plugins → ⚙ → Install Plugin from Disk…**, then restart.
-
-Try it live in a sandbox IDE without installing:
+Build and install into your everyday IDE in one command, then restart IDEA:
 
 ```bash
-./gradlew runIde
+./idectl.sh deploy
 ```
 
-> The `platformVersion` in `gradle.properties` (default `2024.2.4`, Community) is only the **compile**
-> target — the built plugin also runs on IntelliJ IDEA Ultimate and newer builds (no upper bound).
-> Bump it to match your IDE if you prefer.
+Or build the zip and install it by hand:
 
-Once a project is open you'll see a balloon: `IDEA Bridge running at http://127.0.0.1:63344 (MCP: /mcp)`.
+```bash
+./idectl.sh build            # -> build/distributions/idectl-<ver>.zip
+# Settings → Plugins → ⚙ → Install Plugin from Disk… → pick the zip → Restart
+```
+
+Try it in a throwaway sandbox IDE without touching your install (`./idectl.sh -h` for options):
+
+```bash
+./idectl.sh run
+```
+
+When you open the first project, a balloon reports the port and a ready-to-paste connect command.
 
 ---
 
-## Register with Claude Code (MCP)
+## Connect an agent
+
+Easiest — in **Settings → Tools → IDE Control → 一键接入 Agent**, click **一键配置** for Claude Code
+or Codex; it writes the current port + access token into that agent's MCP config for you.
+
+Manually:
 
 ```bash
-claude mcp add --transport http idectl http://127.0.0.1:63344/mcp
+# Claude Code (user / global scope)
+claude mcp add --transport http idectl http://127.0.0.1:48620/mcp \
+  --header "Authorization: Bearer <ACCESS_TOKEN>" -s user
 ```
 
-If you set an access token in settings, add it as a header:
+```toml
+# Codex — ~/.codex/config.toml
+[mcp_servers.idectl]
+url = "http://127.0.0.1:48620/mcp"
 
-```bash
-claude mcp add --transport http idectl http://127.0.0.1:63344/mcp \
-  --header "Authorization: Bearer YOUR_TOKEN"
+[mcp_servers.idectl.http_headers]
+Authorization = "Bearer <ACCESS_TOKEN>"
 ```
 
-MCP tools exposed: `list_projects`, `build`, `list_run_configs`, `run`, `list_sessions`,
-`get_session_output`, `stop_session`, `debug_step`.
-
-> "启动的日志也可以通过 MCP 检索": the plugin subscribes to IDE execution events at startup, so a
-> session you start **by hand** (green Run button) is tracked too. Use `list_sessions` to find it,
-> then `get_session_output` to read its console incrementally.
+The access token is shown on the settings page; the default port is `48620` (it scans upward if busy).
 
 ---
 
-## HTTP API
+## What the agent can do
 
-Base: `http://127.0.0.1:63344`
+| Group | Tools |
+| --- | --- |
+| Discovery | `get_ide_state`, `bind_project` |
+| Project lifecycle | `open_project`, `list_recent_projects`, `close_project`, `refresh_vfs` |
+| Build & run config | `reimport_project`, `create/update/delete_run_configuration`, `set_project_sdk` |
+| Run & sessions | `list_run_configurations`, `run_configuration`, `run_main`, `list_sessions`, `stop_session`, `restart_session` |
+| Console | `console_read`, `console_search` (grep over live + archived output) |
+| Build & hot-reload | `build`, `reload_classes` |
+| Test | `run_test`, `get_test_results` |
+| Debugger | `set_breakpoint`, `remove_breakpoint`, `list_breakpoints`, `debug_control` (resume/pause/step/run-to-line), `get_stack`, `get_variables`, `evaluate` |
+| Governance (admin) | `create_token`, `list_tokens`, `revoke_token` |
 
-### Build — `POST /api/build`
-```jsonc
-{ "type": "project" }                              // make whole project (⌘F9)
-{ "type": "rebuild" }                              // rebuild project
-{ "type": "module", "module": "hotel-model" }      // build one module
-{ "type": "files", "files": ["/abs/path/HotelChannelGroup.java"] }  // recompile file(s)
-```
-Response: `{ success, aborted, errors, warnings, durationMs, messages:[{category,message,file}] }`
-
-### List run configs — `GET /api/run-configs`
-`[{ "name": "OlympiaApiTest.test_static_getCountry", "type": "JUnit", "folder": null }, ...]`
-
-### Run / debug — `POST /api/run`
-```jsonc
-{ "name": "OlympiaApiTest.test_static_getCountry" }                 // run, returns immediately
-{ "name": "OlympiaApiTest.test_static_getCountry", "waitForTerminate": true }  // wait for result
-{ "name": "OlympiaApiTest.test_booking_hotelAvail_direct", "executor": "debug" }
-```
-Returns `{ sessionId, name, executor, alive, terminated, exitCode, nextOffset, outputTail? }`.
-
-### Sessions
-```
-GET  /api/sessions
-GET  /api/sessions/{id}/output?since=0      -> { text, nextOffset, alive, terminated, exitCode }
-POST /api/sessions/{id}/stop
-POST /api/sessions/{id}/resume|pause|stepOver|stepInto|stepOut|stop   (debug only)
-```
-Read logs incrementally by feeding the previous `nextOffset` back as `since`.
+`restart_session` relaunches a running session and can switch it between **run** and **debug** in
+place. Console output is kept in a bounded in-memory ring and spilled to a bounded on-disk archive, so
+old logs stay searchable with `console_search`.
 
 ---
 
-## curl examples
+## Governance
 
-```bash
-# whole-project build
-curl -s localhost:63344/api/build -d '{"type":"project"}'
+Two independent layers, both configured on the settings page:
 
-# build one module
-curl -s localhost:63344/api/build -d '{"type":"module","module":"hotel-model"}'
+- **Tools (WHAT).** A grouped checkbox tree is the owner's kill switch: disable a tool — or a whole
+  group — and it becomes invisible and uncallable to *every* agent, admin included. Per tool you can
+  also require **human approval** (a balloon you approve/deny, fail-closed on timeout) and override the
+  wait **timeout**.
+- **Tokens (WHO / WHERE).** The primary **access token** is always admin over all projects. Issue
+  additional **scoped tokens** with a role — **viewer** (read-only), **operator** (run/debug),
+  **admin** (manage tokens) — plus an optional project allow-list; out-of-scope projects are invisible
+  to that token, and `tools/list` is filtered by role.
 
-# run a test and wait for the result
-curl -s localhost:63344/api/run -d '{"name":"OlympiaApiTest.test_static_getCountry","waitForTerminate":true}'
-
-# start a long-running app (returns immediately with a sessionId)
-SID=$(curl -s localhost:63344/api/run -d '{"name":"Application"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["sessionId"])')
-
-# tail its console
-curl -s "localhost:63344/api/sessions/$SID/output?since=0"
-
-# stop it
-curl -s -X POST "localhost:63344/api/sessions/$SID/stop"
-```
+Effective visibility = *tool enabled* **AND** *role satisfied* **AND** *project in scope*.
 
 ---
 
 ## Architecture
 
 ```
-IdeaBridgeStartup (ProjectActivity)
-  ├─ subscribes each project to ExecutionManager.EXECUTION_TOPIC  ──▶  BridgeExecutionListener
-  │      every started run/debug process becomes a tracked BridgeSession (buffered console)
-  └─ starts IdeaBridgeService (@Service APP)
-         └─ HttpServer (127.0.0.1) ─▶ HttpRouter ─┬─ /mcp   ─▶ McpApi   ┐
-                                                  └─ /api/* ─▶ RestApi  ┴─▶ BridgeController ─▶ IntelliJ APIs
-                                                                              (CompilerManager, RunManager,
-                                                                               ProgramRunnerUtil, XDebuggerManager)
+IdectlBootstrap (ProjectActivity, runs per project)
+  └─ IdectlService (@Service APP, singleton — started once on first project open)
+       ├─ Ktor CIO server on 127.0.0.1:<port>  →  /mcp  (Streamable-HTTP JSON-RPC)
+       │      AuthGate (Bearer → Principal) → McpTransportAdapter → ToolGate → Tool
+       ├─ ToolGate — the single choke point every call passes through:
+       │      role check → kill-switch → project routing/scope → timeout inject
+       │      → human approval → execute → audit
+       └─ IdectlProjectService (@Service PROJECT): run launcher, console store, debug controller
 ```
 
-`BridgeController` is the single implementation; REST and MCP are thin adapters over it.
+- The MCP layer is hand-rolled over the platform's **bundled Ktor 3.x** — the plugin bundles **no**
+  Ktor or kotlinx-coroutines of its own (a second copy would split the classloader graph).
+- Instance discovery is written to `~/.idectl/instances.json`; the audit log to `~/.idectl/audit/`.
+
+---
+
+## Build & develop
+
+`./idectl.sh -h` documents the helper script (`build` / `deploy` / `run` / `clean`).
+
+- **Toolchain**: JDK 21, Gradle 9, IntelliJ Platform Gradle plugin 2.x, Kotlin 2.3.x.
+- **Target**: IntelliJ IDEA 2026.x only (`sinceBuild = 261`, no legacy fallbacks).
+- **Constraint**: never bundle Ktor or kotlinx-coroutines — declare them `compileOnly`; the
+  `verifyNoCoroutinesInZip` build guard fails the build if a coroutines jar sneaks into the zip.
+- Progress & pitfalls are logged in `docs/11-实现进度与问题日志.md`; design lives in `docs/01`–`docs/10`.
+
+## Where state lives
+
+| What | Path |
+| --- | --- |
+| Plugin settings | `<IDE config>/options/idectl.xml` |
+| Instance discovery | `~/.idectl/instances.json` |
+| Audit log | `~/.idectl/audit/*.jsonl` |
+| Console archive (temp) | `<temp>/idectl-console/<sessionId>` |

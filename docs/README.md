@@ -1,4 +1,4 @@
-# IdeaBridge 设计文档
+# Idectl 设计文档
 
 一个 IntelliJ IDEA 插件：内嵌 MCP 服务器，把 IDE 的**构建 / 运行调试 / 控制台日志 / Maven** 能力开放给 AI Agent（Claude Code、Codex 等），支持多 Agent 客户端并发接入与角色分级授权。
 

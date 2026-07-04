@@ -1,6 +1,6 @@
 # 06 竞品与先行者能力差距分析（Prior Art & Gap Analysis）
 
-> IdeaBridge 设计调研 · 2026-07 · 数据来源均为一手资料（JetBrains 官方文档、intellij-community 源码、GitHub 仓库/API、VS Code 官方文档），关键结论均附来源 URL。
+> Idectl 设计调研 · 2026-07 · 数据来源均为一手资料（JetBrains 官方文档、intellij-community 源码、GitHub 仓库/API、VS Code 官方文档），关键结论均附来源 URL。
 
 ---
 
@@ -13,7 +13,7 @@
 3. **开源第三方插件**——以 hechtcarmel 的两个插件（Debugger MCP Server、IDE Index MCP Server）为代表，聚焦单一领域（调试器 / 索引），无一覆盖"构建+运行+控制台+调试+Maven"的全链路，更无多用户权限模型。
 4. **对照生态：VS Code Copilot agent mode**——工具粒度更粗（task/terminal 为中心），但其**逐工具确认（per-tool confirmation）+ 权限分级 + 参数可编辑后放行**的交互设计值得借鉴。
 
-**核心结论**：内建 MCP Server 解决了"单 Agent、单人、拉一次结果"的场景；IdeaBridge 的机会在于 **长生命周期运行/调试会话的流式控制台、Maven 深度集成、多 Agent 多角色并发治理（授权/互斥/审计）、以及对用户手动启动会话的统一跟踪**——这些在所有竞品中均为空白或半空白。
+**核心结论**：内建 MCP Server 解决了"单 Agent、单人、拉一次结果"的场景；Idectl 的机会在于 **长生命周期运行/调试会话的流式控制台、Maven 深度集成、多 Agent 多角色并发治理（授权/互斥/审计）、以及对用户手动启动会话的统一跟踪**——这些在所有竞品中均为空白或半空白。
 
 ---
 
@@ -77,7 +77,7 @@ private const val PORT_STEP: Int = 20
 
 - [JetBrains/mcp-jetbrains](https://github.com/JetBrains/mcp-jetbrains)：960 stars，纯 JS stdio↔HTTP proxy；通过 IDE 内置 web server 的 REST 端点（如 `/api/mcp/list_tools`）转发；`IDE_PORT` / `HOST` / `LOG_ENABLED` 环境变量定位 IDE，未指定 `IDE_PORT` 时在内置 web server 端口段（63342 起）扫描。npm 最后版本 1.8.0。README 首行明示 **"This repository is no longer maintained… integrated into all IntelliJ-based IDEs since 2025.2"**。
 - [JetBrains/mcp-server-plugin](https://github.com/JetBrains/mcp-server-plugin)：131 stars，最后 push 2025-08，同样声明停止维护；它定义的旧扩展点（`com.intellij.mcpServer.mcpTool`，`AbstractMcpTool` 基类）被平台内建版的 `com.intellij.mcpServer.mcpToolset` 取代。Marketplace 插件 26071（下载量 1380 万+）保留给 2025.2 之前的 IDE 用户。
-- **对 IdeaBridge 的启示**：proxy 架构（stdio 进程 + 端口扫描发现 IDE）是**多 IDE 实例发现**的现成参考实现；官方放弃 proxy 转向 IDE 内嵌 + SSE/streamable HTTP，验证了我们"IDE 内嵌 MCP server"的技术路线。
+- **对 Idectl 的启示**：proxy 架构（stdio 进程 + 端口扫描发现 IDE）是**多 IDE 实例发现**的现成参考实现；官方放弃 proxy 转向 IDE 内嵌 + SSE/streamable HTTP，验证了我们"IDE 内嵌 MCP server"的技术路线。
 
 ### 2.3 开源第三方插件盘点（stars 为 2026-07-03 GitHub API 实测）
 
@@ -136,14 +136,14 @@ class HelloToolset : McpToolset {
 // </extensions>
 ```
 
-要点（全部来自官方 README，是设计 IdeaBridge 工具层的直接参照）：
+要点（全部来自官方 README，是设计 Idectl 工具层的直接参照）：
 - 参数支持原始类型 / String / nullable / List / Map / `@Serializable` 类，**kotlinx.serialization 生成 JSON schema，递归类型不支持**；Kotlin 默认值→optional，但**默认值本身不会写进 schema**，须手写进 `@McpDescription`。
 - 返回：`Unit`→`[success]`、原始值→toString、`@Serializable`→JSON、或 `McpToolCallResult`；抛 `McpExpectedError`（`mcpFail(...)`）保留错误文本。
 - `projectPath` 由框架**自动注入到每个工具**，实现里用 `currentCoroutineContext().project` 取 `Project`。
 - 长任务用 `currentCoroutineContext().reportToolActivity("...")` 上报进度到 IDE UI。
-- ⚠️ 该 EP **2025.2 才存在**——IdeaBridge sinceBuild=233 无法依赖它，必须自带 MCP server（见 §5）。
+- ⚠️ 该 EP **2025.2 才存在**——Idectl sinceBuild=233 无法依赖它，必须自带 MCP server（见 §5）。
 
-### 3.2 竞品用到的、IdeaBridge 同样要用的平台 API（233 可用）
+### 3.2 竞品用到的、Idectl 同样要用的平台 API（233 可用）
 
 ```kotlin
 // 运行配置枚举（ExecutionToolset 同款）
@@ -182,13 +182,13 @@ com.intellij.task.ProjectTaskManager.getInstance(project).buildAllModules()   //
 
 ### 3.3 老 proxy 架构（多实例发现参考）
 
-`@jetbrains/mcp-proxy`：stdio MCP server → 轮询 `http://127.0.0.1:{port}/api/mcp/list_tools`（IDE 内置 web server，63342 起的端口段）→ 找到响应的 IDE 即绑定；`IDE_PORT`/`HOST` 环境变量可显式指定。多 IDE 实例 = 起多个 proxy 各配一个 `IDE_PORT`。来源：[mcp-jetbrains README](https://github.com/JetBrains/mcp-jetbrains)。IdeaBridge 可做得更好：固定发现文件（如 `~/.ideabridge/instances.json`，插件启动时写入 port+项目列表+PID）替代端口扫描。
+`@jetbrains/mcp-proxy`：stdio MCP server → 轮询 `http://127.0.0.1:{port}/api/mcp/list_tools`（IDE 内置 web server，63342 起的端口段）→ 找到响应的 IDE 即绑定；`IDE_PORT`/`HOST` 环境变量可显式指定。多 IDE 实例 = 起多个 proxy 各配一个 `IDE_PORT`。来源：[mcp-jetbrains README](https://github.com/JetBrains/mcp-jetbrains)。Idectl 可做得更好：固定发现文件（如 `~/.idectl/instances.json`，插件启动时写入 port+项目列表+PID）替代端口扫描。
 
 ---
 
 ## 4. 线程模型注意事项（EDT / ReadAction / WriteAction / 协程）
 
-官方 mcp-server 插件的实践（README §7–§9 + ExecutionToolset 源码）就是 IdeaBridge 的模板：
+官方 mcp-server 插件的实践（README §7–§9 + ExecutionToolset 源码）就是 Idectl 的模板：
 
 1. **工具函数都是 `suspend fun`，跑在后台协程**，绝不在 EDT 上执行工具体；MCP server（Ktor/内置 web server）的 IO 线程只做解码，业务切到 `Dispatchers.Default`。
 2. **读 PSI/RunManager/VFS 必须 `readAction { }`**（`com.intellij.openapi.application.readAction`，suspend 版；2024.1 前可用 `ReadAction.nonBlocking().executeSynchronously()` 兜底）。官方 `get_run_configurations` 全程 `readAction { runManager.allSettings.map { ... } }`。
@@ -196,17 +196,17 @@ com.intellij.task.ProjectTaskManager.getInstance(project).buildAllModules()   //
 4. **启动 run configuration 必须回 EDT**：`ProgramRunnerUtil.executeConfiguration` 要求 EDT，用 `withContext(Dispatchers.EDT)` 包裹；等待进程结束用 `suspendCancellableCoroutine` + `ProcessListener.processTerminated`，配 `withTimeoutOrNull(timeout)`（官方 execute_run_configuration 的 timeout/waitForExit 语义即如此实现）。
 5. **调试器回调线程不确定**：`XDebugSession` 事件在 debugger manager thread 上来，`evaluate` 是异步 callback——转 suspend 时注意不要在 debugger 线程里再取 read lock 造成死锁。
 6. **取消传播**：MCP 客户端断连/取消 → 协程 cancel → 必须传导到 `ProgressIndicator`（`coroutineToIndicator`）与子进程。官方框架自动处理 cancellation，自研 server 要自己接。
-7. DevKit 甚至提供了 `find_threading_requirements_usages` 工具帮忙静态验证 `@RequiresEdt/@RequiresReadLock` 调用路径——开发期可直接用官方 IDE 的 MCP 来审计 IdeaBridge 自己的线程正确性（吃自己狗粮的捷径）。
+7. DevKit 甚至提供了 `find_threading_requirements_usages` 工具帮忙静态验证 `@RequiresEdt/@RequiresReadLock` 调用路径——开发期可直接用官方 IDE 的 MCP 来审计 Idectl 自己的线程正确性（吃自己狗粮的捷径）。
 
 ---
 
 ## 5. 版本兼容性（sinceBuild=233 → 2026.1）
 
-| 版本 | 事实 | 对 IdeaBridge 的影响 |
+| 版本 | 事实 | 对 Idectl 的影响 |
 |---|---|---|
-| 233 (2023.3) ~ 2025.1 | 无内建 MCP。官方路线 = marketplace 插件 26071 + npm proxy（均已停更）。 | 这个区间是 IdeaBridge 的**独占市场**；必须自带嵌入式 MCP server（Ktor CIO + MCP Kotlin SDK 或手写 streamable HTTP），不可依赖任何 `com.intellij.mcpserver.*` API |
+| 233 (2023.3) ~ 2025.1 | 无内建 MCP。官方路线 = marketplace 插件 26071 + npm proxy（均已停更）。 | 这个区间是 Idectl 的**独占市场**；必须自带嵌入式 MCP server（Ktor CIO + MCP Kotlin SDK 或手写 streamable HTTP），不可依赖任何 `com.intellij.mcpserver.*` API |
 | 2025.2 (252) | 内建 MCP Server（bundled `com.intellij.mcpServer`，默认关）；`com.intellij.mcpServer.mcpToolset` EP（dynamic）诞生；端口 64342+offset；旧 proxy/插件宣告废弃 | 与内建 server 共存：端口错开（不要用 64342±120 段）；可**可选地**再注册一份 toolset 进官方 server（optional depends，双通道），但权限/会话治理只能在自有通道实现，因为官方通道无认证无会话概念 |
-| 2025.2+ Ultimate | Debugger MCP toolset bundled（`xdebug_*` 13 个工具），**Community 不带**；调试事件仅 JVM 调试器 | Community 用户的调试器 MCP 仍是空白 → IdeaBridge 的调试工具对 Community + 233~2025.1 双重差异化 |
+| 2025.2+ Ultimate | Debugger MCP toolset bundled（`xdebug_*` 13 个工具），**Community 不带**；调试事件仅 JVM 调试器 | Community 用户的调试器 MCP 仍是空白 → Idectl 的调试工具对 Community + 233~2025.1 双重差异化 |
 | 2026.1（当前文档版本） | 工具面扩到 ~60+（read_file 多模式、patch、universal tool-router 模式、DB 工具、notebook）；仍无 Maven toolset、无 run session 管理、无认证 | 空白至今未填，YouTrack 上相关 issue（LLM-25012 OAuth、IJPL-207839 端口）仍 open |
 | Gradle 侧 | intellij-platform-gradle-plugin 2.x + sinceBuild=233、无 untilBuild：注意 233~241 上用到的 API 需逐一核对（如 suspend `readAction` 在 2023.3 已有；`edtWriteAction` 较新，233 上用 `WriteCommandAction` 替代） | CI 矩阵建议至少 233、242、252、261 四档跑 verifier |
 
@@ -215,22 +215,22 @@ com.intellij.task.ProjectTaskManager.getInstance(project).buildAllModules()   //
 ## 6. 已知坑与限制（来自一手资料）
 
 1. **内建 MCP 的 run `sessionId` 是摆设**：源码注释明写 run 模式 sessionId 置 null；`fullOutputPath` 临时文件"IDE 存活期间可用"但无清理契约、无 offset 协议，长跑 Spring Boot 输出会无限增长。
-2. **内建 terminal 工具 2000 行硬上限** + 默认逐次确认；brave mode 是全局开关，一开则 shell 与 run configuration 全免确认——粒度过粗，正是 IdeaBridge 分角色授权要解决的。
+2. **内建 terminal 工具 2000 行硬上限** + 默认逐次确认；brave mode 是全局开关，一开则 shell 与 run configuration 全免确认——粒度过粗，正是 Idectl 分角色授权要解决的。
 3. **官方框架 schema 不含默认值**（bytecode 无元数据），默认值必须写进 description——自研工具层要么同样注意，要么选择手写 JSON schema。
 4. VS Code `runTasks` 的"永远成功"bug（vscode#274975）与 terminal 输出丢失（community#161238）说明：**基于终端文本嗅探的构建/运行状态是不可靠的**，必须走 IDE 内部事件（`CompilationStatusListener`、`ProcessListener`）拿结构化结果。
-5. 老 proxy 端口扫描在多 IDE 并存时会连错实例（README 要求手工 `IDE_PORT`）；内建版同样无实例发现。IdeaBridge 需要显式的 instance registry。
-6. `XDebuggerEvaluator.evaluate` 等价于目标 JVM 内任意代码执行；先例（hechtcarmel 插件）已提供三档安全策略（unrestricted / blocklist / read-only+regex），IdeaBridge 的角色模型应至少达到该水准并叠加审计。
+5. 老 proxy 端口扫描在多 IDE 并存时会连错实例（README 要求手工 `IDE_PORT`）；内建版同样无实例发现。Idectl 需要显式的 instance registry。
+6. `XDebuggerEvaluator.evaluate` 等价于目标 JVM 内任意代码执行；先例（hechtcarmel 插件）已提供三档安全策略（unrestricted / blocklist / read-only+regex），Idectl 的角色模型应至少达到该水准并叠加审计。
 7. `com.intellij.mcpServer.mcpToolset` 的 `isExperimental()` 默认 true——若走"寄生官方 server"路线，工具默认可能被 experimental 过滤影响可见性。
-8. 构建互斥：`ProjectTaskManager` 并发触发构建时 JPS 内部排队但无对外队列可见性——IdeaBridge 需要自己维护构建锁与"谁在等"的语义（竞品全部未处理）。
+8. 构建互斥：`ProjectTaskManager` 并发触发构建时 JPS 内部排队但无对外队列可见性——Idectl 需要自己维护构建锁与"谁在等"的语义（竞品全部未处理）。
 9. 官方 MCP server 默认**关闭**（`enableMcpServer=false`），依赖用户手动开启——意味着"开箱即用的 Agent 控制 IDE"体验尚不存在，安装即用是可打的点。
 
 ---
 
 ## 7. 能力差距表
 
-图例：✅ 完整支持 ｜ 🟡 部分/绕行 ｜ ❌ 不支持 ｜ 🎯 IdeaBridge 设计目标
+图例：✅ 完整支持 ｜ 🟡 部分/绕行 ｜ ❌ 不支持 ｜ 🎯 Idectl 设计目标
 
-| 能力 | JetBrains 内建 MCP (2025.2+) | mcp-proxy(旧官方, 已废弃) | Index MCP (268★) | Debugger MCP (85★) | AgentBridge (64★) | VS Code Copilot agent | **IdeaBridge 🎯** |
+| 能力 | JetBrains 内建 MCP (2025.2+) | mcp-proxy(旧官方, 已废弃) | Index MCP (268★) | Debugger MCP (85★) | AgentBridge (64★) | VS Code Copilot agent | **Idectl 🎯** |
 |---|---|---|---|---|---|---|---|
 | 构建项目 | ✅ `build_project`(等待+返回错误) | 🟡 旧工具集 | 🟡 默认关闭 | ❌ | ✅ | 🟡 `runTasks`(有假成功 bug) | 🎯 |
 | 构建模块 | ❌ 无 module 粒度 | ❌ | ❌ | ❌ | ❌ | ❌ | 🎯 |
@@ -260,12 +260,12 @@ com.intellij.task.ProjectTaskManager.getInstance(project).buildAllModules()   //
 
 ---
 
-## 8. 结论：IdeaBridge 差异化价值主张
+## 8. 结论：Idectl 差异化价值主张
 
 1. **运行/调试会话的一等公民生命周期 + 流式控制台**：唯一提供 list/stop/restart 任意会话、offset/tail 增量读取、服务端 regex grep（含上下文行），并且**统一跟踪用户手动启动的会话**（`ExecutionManager.EXECUTION_TOPIC` + `ProcessListener` ring buffer）——内建 MCP 只有"启动后拿快照/临时文件"，全部竞品为 ❌。
 2. **Maven 深度集成**：sync/reimport、结构化模块列表、任意 goal（结构化输出）、profile 查询与切换、下载源码——整个生态目前是零（最强的 index-mcp-plugin 也只有 reimport）。
 3. **多 Agent 多角色治理**：token 认证 + 只读/操作者/管理员三级角色 + 会话-项目绑定路由 + 构建互斥等并发语义 + 全量审计日志。内建 MCP 无认证、brave mode 全局一刀切；VS Code 的确认粒度证明了市场对分级授权的接受度，但它是单人产品。
-4. **全版本、全 Edition 覆盖**：233 (2023.3)~2025.1 完全没有官方 MCP；2025.2+ 的 Community 版没有调试器 toolset。IdeaBridge 一个插件同时补齐两块，且与内建 server 端口/功能错位共存。
+4. **全版本、全 Edition 覆盖**：233 (2023.3)~2025.1 完全没有官方 MCP；2025.2+ 的 Community 版没有调试器 toolset。Idectl 一个插件同时补齐两块，且与内建 server 端口/功能错位共存。
 5. **模块/单文件粒度构建 + 可靠的结构化结果**：暴露 build module、⇧⌘F9 单文件重编译，基于 `CompilationStatusListener` 返回结构化错误/警告——规避 VS Code "runTasks 永远成功"式的终端嗅探陷阱，也补上内建 `build_project` 缺失的粒度。
 
 ---

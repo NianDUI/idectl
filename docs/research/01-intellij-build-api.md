@@ -1,6 +1,6 @@
 # 调研报告 01：IntelliJ 平台"构建/编译"控制 API
 
-> IdeaBridge 设计调研 · 2026-07-03 · 目标平台：IDEA 2024.2+（sinceBuild=233，无 untilBuild）
+> Idectl 设计调研 · 2026-07-03 · 目标平台：IDEA 2024.2+（sinceBuild=233，无 untilBuild）
 > 所有签名均核对自 JetBrains/intellij-community master 分支源码（一手资料），来源见文末。
 
 ---
@@ -13,7 +13,7 @@ IntelliJ 平台的"构建"能力分为三层：
    现代统一的构建门面。IDE"Build"菜单的四个动作最终都调用它。它把 `ProjectTask` 分发给
    `ProjectTaskRunner` 扩展点（EP `com.intellij.projectTaskRunner`）——JPS 内建 runner、
    `GradleProjectTaskRunner`、`MavenProjectTaskRunner` 等——因此**无论构建是否委托给
-   Gradle/Maven，调用方式与返回的 `Promise<Result>` 都一致**。这正是 IdeaBridge 的
+   Gradle/Maven，调用方式与返回的 `Promise<Result>` 都一致**。这正是 Idectl 的
    `build_project` / `build_module` / `recompile_files` MCP 工具应当依赖的抽象。
 
 2. **`com.intellij.openapi.compiler.CompilerManager`（java/compiler/openapi，仅 JPS）**
@@ -27,9 +27,9 @@ IntelliJ 平台的"构建"能力分为三层：
    进入 Build 工具窗口的 `BuildEvent`。通过 `addListener` 订阅可获得**跨构建系统统一的结构化
    事件流**：`StartBuildEvent`/`FinishBuildEvent`/`OutputBuildEvent`/`ProgressBuildEvent`/
    `MessageEvent`/`FileMessageEvent`（含 `FilePosition` 文件+行+列）。这是**同时兼容 JPS 与
-   Gradle/Maven 委托构建的错误收集通道**，推荐作为 IdeaBridge 结构化诊断的主通道。
+   Gradle/Maven 委托构建的错误收集通道**，推荐作为 Idectl 结构化诊断的主通道。
 
-**IdeaBridge 推荐组合**：`ProjectTaskManager` 发起构建并等待 `Promise<Result>`（成败/中止判定）
+**Idectl 推荐组合**：`ProjectTaskManager` 发起构建并等待 `Promise<Result>`（成败/中止判定）
 + 同一时间窗内订阅 `BuildViewManager` 的 `BuildProgressListener` 收集 `FileMessageEvent`
 （文件/行/列/severity）；JPS 场景可叠加 `CompilerTopics.COMPILATION_STATUS` 取
 `CompileContext.getMessages(...)` 交叉校验。
@@ -95,7 +95,7 @@ interface Result {
 
 ```kotlin
 class ProjectTaskContext(
-  val sessionId: Any? = null,                 // 会话标识——IdeaBridge 可放入自己的关联 ID
+  val sessionId: Any? = null,                 // 会话标识——Idectl 可放入自己的关联 ID
   val runConfiguration: RunConfiguration? = null,
   val isAutoRun: Boolean = false,             // true 表示任务由自动构建触发
   val dataContext: DataContext? = null,
@@ -111,7 +111,7 @@ class ProjectTaskContext(
 }
 ```
 
-`sessionId` + `withUserData` 是 IdeaBridge 把"哪个 Agent 发起的构建"贯穿到监听器的天然载体：
+`sessionId` + `withUserData` 是 Idectl 把"哪个 Agent 发起的构建"贯穿到监听器的天然载体：
 `run(ProjectTaskContext(sessionId = mcpRequestId), createAllModulesBuildTask(true, project))`。
 
 **ProjectTaskListener**（`com.intellij.task.ProjectTaskListener`，项目级消息总线 Topic）：
@@ -229,7 +229,7 @@ default Collection<String> getModuleNames();   // 模块名（或循环依赖中
 （impl，非 SDK 公开）推入 Problems 工具窗口的 "Project Errors" 标签（2020.3 引入该 UI）。
 现代公开 API 是 `com.intellij.analysis.problemsView.ProblemsCollector` / `ProblemsProvider`（用于
 *贡献*问题）；**Problems 视图不提供读取已有问题列表的公开 API**（官方答复：只能参考
-`ProjectErrorsCollector`/`HighlightingWatcher` 自行实现）。IdeaBridge 不应依赖 ProblemsView 读数，
+`ProjectErrorsCollector`/`HighlightingWatcher` 自行实现）。Idectl 不应依赖 ProblemsView 读数，
 而应在构建回调/事件中自行收集。另注意 ProblemsView/编译子系统与 Java 插件强绑定（WebStorm 等
 轻量 IDE 无此能力）——与我们 `bundledPlugin("com.intellij.java")` 的约束一致。
 
@@ -242,7 +242,7 @@ default Collection<String> getModuleNames();   // 模块名（或循环依赖中
 | Recompile 单文件 ⇧⌘F9 | `CompileAction` | 文件：`...compile(files)`；选中模块时：`...rebuild(module)` |
 | Rebuild Project | `CompileProjectAction` | `ProjectTaskManager.getInstance(project).rebuildAllModules()` |
 
-即：IdeaBridge 直接调用同名 `ProjectTaskManager` 方法即可获得与 IDE 菜单**逐字节一致**的语义
+即：Idectl 直接调用同名 `ProjectTaskManager` 方法即可获得与 IDE 菜单**逐字节一致**的语义
 （包括 delegated build 路由），无需 `ActionManager.tryToExecute` 模拟按键。
 
 ### 2.5 推荐编程模式：发起构建、等待完成、收集错误
@@ -308,7 +308,7 @@ class BuildController(private val project: Project, parentDisposable: Disposable
   runner + `ProjectTaskResultsAggregator`）。真正的互斥在下层：JPS 的 `CompilerManagerImpl` 持
   `private final Semaphore myCompilationSemaphore = new Semaphore(1, true)`（公平信号量，单许可），
   `isCompilationActive()` 即 `availablePermits()==0`——**同一项目的 JPS 编译串行化**，第二个请求
-  阻塞等待而非失败。Gradle 委托构建则由 Gradle 侧排队。IdeaBridge 建议自建"项目级构建互斥/队列 +
+  阻塞等待而非失败。Gradle 委托构建则由 Gradle 侧排队。Idectl 建议自建"项目级构建互斥/队列 +
   排队状态上报"，不要依赖底层隐式阻塞（这也是多 Agent 并发语义的需求点）。
 - **取消构建**：`Promise` 是 `CancellablePromise`（AsyncPromise），但 **cancel 该 Promise 并不保证
   中止底层构建进程**——平台未公开"取消进行中构建"的稳定 API（UI 上的停止按钮走内部
@@ -370,7 +370,7 @@ class BuildController(private val project: Project, parentDisposable: Disposable
 - **JPS 构建 vs 后台自动构建（automake）**：automake（Settings → Build project automatically）
   由 JPS 在后台增量执行，完成回调是 `automakeCompilationFinished(errors, warnings, context)`，
   且 `CompileContext.isAutomake()==true`、`ProjectTaskContext.isAutoRun==true`。automake **不写
-  Build 工具窗口**，错误进 Problems 视图；IdeaBridge 若把 automake 结果也上报给 Agent，需单独
+  Build 工具窗口**，错误进 Problems 视图；Idectl 若把 automake 结果也上报给 Agent，需单独
   订阅该回调并打上 auto 标记，避免与显式构建请求混淆。
 - **External Builder（JPS）架构**：显式构建在**独立的外部进程**中执行（SDK 文档 "External Builder
   API and Plugins"）：before-compile task（IDE 进程）→ `BuildTargetScopeProvider` 计算范围 → 启动/
@@ -390,7 +390,7 @@ class BuildController(private val project: Project, parentDisposable: Disposable
 | `CompilerManager.compile/make/rebuild` 发起 | 历史上要求从 EDT 发起（内部 CompileDriver 假设）；如用它，包一层 `invokeLater`。优先用 ProjectTaskManager 规避 |
 | `promise.blockingGet(...)` | **绝不能在 EDT**（resolve 需回 EDT → 死锁）；后台线程用短超时轮询 + checkCanceled |
 | 解析 `VirtualFile`/`Module`（组装参数） | 需要 ReadAction（如 `ReadAction.compute { ProjectFileIndex...getModuleForFile(vf) }`）；`LocalFileSystem.findFileByPath` 建议也在 ReadAction 内 |
-| Kotlin 协程桥接 | `Promise.await()`（`org.jetbrains.concurrency.await`，platform 已提供 suspend 扩展）可把 Promise 融入 IdeaBridge 的协程模型；JetBrains 官方方向是新代码用协程替代 Promise |
+| Kotlin 协程桥接 | `Promise.await()`（`org.jetbrains.concurrency.await`，platform 已提供 suspend 扩展）可把 Promise 融入 Idectl 的协程模型；JetBrains 官方方向是新代码用协程替代 Promise |
 | MCP 服务器线程 → IDE | 一律通过 `invokeLater` / ReadAction / 协程调度器进入平台线程模型，禁止直接触碰 PSI/VFS |
 
 ---
@@ -422,12 +422,12 @@ class BuildController(private val project: Project, parentDisposable: Disposable
 3. **委托构建下 JPS 监听全部静默**——功能测试必须覆盖 "Build and run using: Gradle/IDEA" 两种
    设置；每模块可不同（Gradle 设置按 linked project 存储）。
 4. **并发构建语义模糊**：ProjectTaskManager 不互斥，JPS 信号量隐式阻塞第二个请求（无排队反馈）。
-   IdeaBridge 必须自建每项目构建队列，向 Agent 显式返回 queued/running 状态。
+   Idectl 必须自建每项目构建队列，向 Agent 显式返回 queued/running 状态。
 5. **无公开"取消构建"API**：Promise.cancel 不停底层进程；只能 best-effort（JPS 经
    ProgressIndicator；Gradle 委托经取消对应 ExternalSystem 任务）。实现期专项验证。
 6. **EDT 死锁**：在 EDT 上 blockingGet 构建 Promise 必死锁；`onSuccess` 中做重活会卡 UI。
 7. **automake 不进 Build 窗口**、错误走 Problems 视图；且 Problems 视图**无公开读取 API**
-   （官方确认，只能自行用 `HighlightingWatcher`/`ProjectErrorsCollector` 思路重建）——IdeaBridge 的
+   （官方确认，只能自行用 `HighlightingWatcher`/`ProjectErrorsCollector` 思路重建）——Idectl 的
    "错误清单"以构建事件为准，不做 Problems 视图抓取。
 8. **BuildViewManager 在 lang-impl**：属内部实现区，Remote Dev 前后端拆分在推进，升级目标平台
    时优先回归此处。

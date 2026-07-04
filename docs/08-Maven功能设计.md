@@ -4,7 +4,7 @@
 
 ## 1. 类加载隔离（硬约束，D13）
 
-- `plugin.xml`：`<depends optional="true" config-file="ideabridge-maven.xml">org.jetbrains.idea.maven</depends>`。
+- `plugin.xml`：`<depends optional="true" config-file="idectl-maven.xml">org.jetbrains.idea.maven</depends>`。
 - 核心 classloader **零** `org.jetbrains.idea.maven` 引用（含方法签名与 catch 类型，否则 Maven 禁用时 NoClassDefFoundError）；核心只见 `MavenFacade` 接口，实现与 Maven 工具注册全部在 optional descriptor。
 - 探测用 `MavenProjectsManager.getInstanceIfCreated(project)` / facade 是否注册；缺席时 maven_* 返回 `UNAVAILABLE`（结构化降级，FR-MVN-6）。
 

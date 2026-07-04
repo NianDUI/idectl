@@ -12,7 +12,7 @@
 
 版本序列：`2024-11-05` → `2025-03-26` → `2025-06-18` → **`2025-11-25`（当前 stable，latest）** → `2026-07-28`（Release Candidate，2026-05-21 已锁定，计划 2026-07-28 正式发布）。
 
-**结论：IdeaBridge 应以 `2025-11-25` 为设计基线协议版本**，同时在设计上预留对 `2026-07-28` 的适配空间（见 1.3）。`2025-06-18` 已落后两个版本。
+**结论：Idectl 应以 `2025-11-25` 为设计基线协议版本**，同时在设计上预留对 `2026-07-28` 的适配空间（见 1.3）。`2025-06-18` 已落后两个版本。
 
 `2025-11-25` 相对 `2025-06-18` 的关键变化（[官方 changelog](https://modelcontextprotocol.io/specification/2025-11-25/changelog)）：
 
@@ -34,7 +34,7 @@
 - Tasks 从实验特性升级为扩展（extension）；新增 MCP Apps 扩展。
 - Tier 1 SDK（Python/TypeScript/Go/C#）已有 beta；**Kotlin SDK 不在 Tier 1 首批 beta 列表中**，跟进节奏需持续观察。
 
-### 1.3 对 IdeaBridge 的总体建议（先给结论）
+### 1.3 对 Idectl 的总体建议（先给结论）
 
 1. **协议**：实现 Streamable HTTP（`POST/GET/DELETE /mcp`），协议版本协商 `2025-11-25`，同时兼容旧客户端的 `2025-03-26`/`2025-06-18`。
 2. **SDK**：选 **MCP Kotlin SDK（`io.modelcontextprotocol:kotlin-sdk-server`）**——JetBrains 自家 IDE 内建 MCP server 就是用它 + Ktor CIO（见 §5），等于官方替我们蹚过坑。
@@ -73,7 +73,7 @@
 
 - **Authorization 对 MCP 实现是 OPTIONAL**；HTTP 传输"SHOULD conform"，stdio 传输"SHOULD NOT follow"（从环境取凭据）。
 - 若实现：MCP server 作为 OAuth 2.1 resource server，**MUST 实现 RFC 9728 Protected Resource Metadata**（`/.well-known/oauth-protected-resource`），401 响应带 `WWW-Authenticate: Bearer resource_metadata="…"`；客户端 MUST 支持头与 well-known 两种发现；MUST 用 `Authorization: Bearer <token>`（每个请求都要带，token 不得进 query string）；invalid/expired token → 401，scope 不足 → 403 + `error="insufficient_scope"`；客户端 MUST 实现 PKCE(S256) 与 RFC 8707 `resource` 参数。
-- **localhost 实践**：规范未给"官方豁免"，但业界（含 JetBrains 内建 MCP server、Claude Code `--header "Authorization: Bearer $KEY"`、Codex `bearer_token_env_var`）的通行做法是：**只绑 127.0.0.1 + 静态 Bearer token / 自定义 header token + Origin/Host 校验**，不上完整 OAuth。JetBrains 的 `authorizedSession` 私有服务器用自定义头 `IJ_MCP_AUTH_TOKEN: <uuid>` 做逐会话 token（见 §5）。IdeaBridge 采用相同思路：为每客户端签发 token，token 映射到角色（只读/操作者/管理员），校验放在 Ktor pipeline 拦截器里，未带/无效 → 401 + `WWW-Authenticate: Bearer`。
+- **localhost 实践**：规范未给"官方豁免"，但业界（含 JetBrains 内建 MCP server、Claude Code `--header "Authorization: Bearer $KEY"`、Codex `bearer_token_env_var`）的通行做法是：**只绑 127.0.0.1 + 静态 Bearer token / 自定义 header token + Origin/Host 校验**，不上完整 OAuth。JetBrains 的 `authorizedSession` 私有服务器用自定义头 `IJ_MCP_AUTH_TOKEN: <uuid>` 做逐会话 token（见 §5）。Idectl 采用相同思路：为每客户端签发 token，token 映射到角色（只读/操作者/管理员），校验放在 Ktor pipeline 拦截器里，未带/无效 → 401 + `WWW-Authenticate: Bearer`。
 
 ### 2.4 elicitation / progress / cancellation / tasks（长操作支撑）
 
@@ -97,12 +97,12 @@
 - 对比 **MCP Java SDK**（[modelcontextprotocol/java-sdk](https://github.com/modelcontextprotocol/java-sdk)）：最新 **2.0.0 GA**（跟踪 2025-11-25 规范），核心 `io.modelcontextprotocol.sdk:mcp` 内置 STDIO/SSE/Streamable HTTP 服务端传输、不依赖 web 框架；`McpSyncServer server = McpServer.sync(transportProvider).build()`；内部用 Project Reactor + Jackson。**更成熟（已 2.0 GA）但引入 Reactor+Jackson 两套重依赖**，且与 IDEA 平台 Kotlin 协程世界割裂（EDT/ReadAction 的协程适配都在 kotlinx.coroutines 侧）。
 - **结论：在 IDEA 插件里用 Kotlin SDK 更稳**——JetBrains 官方 mcp-server 插件在生产中用的就是它（`import io.modelcontextprotocol.kotlin.sdk.server.Server` 见 intellij-community 源码），协程模型与平台一致；代价是 0.x API 漂移，用适配层封住。
 
-### 2.6 Kotlin 代码草图（IdeaBridge 服务器骨架）
+### 2.6 Kotlin 代码草图（Idectl 服务器骨架）
 
 ```kotlin
 // Application 级服务，构造器注入插件级 CoroutineScope（平台特性，2023.x+）
 @Service
-class IdeaBridgeServerService(private val cs: CoroutineScope) : Disposable {
+class IdectlServerService(private val cs: CoroutineScope) : Disposable {
 
   private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
 
@@ -121,12 +121,12 @@ class IdeaBridgeServerService(private val cs: CoroutineScope) : Disposable {
         buildMcpServer()                                // -> io.modelcontextprotocol.kotlin.sdk.server.Server
       }
     }.also { it.start(wait = false) }
-    InstanceRegistry.publish(port)                      // ~/.idea-bridge/instances.json
+    InstanceRegistry.publish(port)                      // ~/.idectl/instances.json
   }
 
   private fun buildMcpServer(): Server =
     Server(
-      serverInfo = Implementation("idea-bridge", pluginVersion),
+      serverInfo = Implementation("idectl", pluginVersion),
       options = ServerOptions(
         capabilities = ServerCapabilities(tools = ServerCapabilities.Tools(listChanged = true)),
       ),
@@ -159,7 +159,7 @@ class IdeaBridgeServerService(private val cs: CoroutineScope) : Disposable {
 `plugin.xml`：
 
 ```xml
-<applicationService serviceImplementation="....IdeaBridgeServerService"/>
+<applicationService serviceImplementation="....IdectlServerService"/>
 <postStartupActivity implementation="....StartBridgeActivity"/> <!-- 或 ProjectActivity -->
 ```
 
@@ -184,7 +184,7 @@ class IdeaBridgeServerService(private val cs: CoroutineScope) : Disposable {
   1. Netty 管道以 `FullHttpRequest`（整包缓冲）为模型，`RestService` 面向"短请求-短响应"；SSE 长流要绕过其响应封装直接向 `ChannelHandlerContext` 写 chunked 数据并自行管理 keep-alive/超时，等于手写一遍传输层，且是内部 API，跨版本易碎。
   2. 内建服务器有自己的信任模型（`isHostTrusted` 校验 referrer/origin，未知来源会弹确认框），与 MCP 客户端的编程访问冲突。
   3. 63342 端口被浏览器/其它工具共享，审计与隔离性差。
-- 有用之处：可注册一个极轻量的 `GET /api/idea-bridge/discovery` 返回本实例的 MCP 端口/项目列表（无需长连接），作为**实例发现的备用通道**。JetBrains 旧版 stdio proxy 就是扫描 63342–63352 找 IDE 的。
+- 有用之处：可注册一个极轻量的 `GET /api/idectl/discovery` 返回本实例的 MCP 端口/项目列表（无需长连接），作为**实例发现的备用通道**。JetBrains 旧版 stdio proxy 就是扫描 63342–63352 找 IDE 的。
 
 ### 方案 C：JDK `com.sun.net.httpserver.HttpServer` — 备选
 
@@ -226,9 +226,9 @@ class IdeaBridgeServerService(private val cs: CoroutineScope) : Disposable {
 实测源码要点（`com.intellij.mcpserver.impl.McpServerService`、`impl/util/network/mcp.sdk.util.kt`、`settings/McpServerSettings.kt`）：
 
 - **技术栈**：Ktor `embeddedServer(CIO, host = "127.0.0.1", port)` + 官方 **kotlin-sdk**（`io.modelcontextprotocol.kotlin.sdk.server.Server/ServerOptions/SseServerTransport/StreamableHttpServerTransport`）。
-- **端口**：`BASE_MCP_PORT = 64342`，各产品偏移 `PORT_STEP = 20`（IDEA +0、CLion +20、DataGrip +60、GoLand +80、PhpStorm +100、PyCharm +120、Rider +140、RubyMine +160、RustRover +180、WebStorm +200）；`findFirstFreePort(desiredPort)` 向上递增；实际端口持久化在 `options/mcpServer.xml`（`McpServerSettings.MyState.mcpServerPort`）；可用系统属性强制端口/强制开启（`IJ_MCP_FORCE_PORT_PROPERTY`/`IJ_MCP_FORCE_ENABLE_PROPERTY`）。**多实例同产品会各自递增抢端口且覆写设置——用户抱怨点（YouTrack IJPL-207839），IdeaBridge 要规避：端口注册表而非单值设置。**
+- **端口**：`BASE_MCP_PORT = 64342`，各产品偏移 `PORT_STEP = 20`（IDEA +0、CLion +20、DataGrip +60、GoLand +80、PhpStorm +100、PyCharm +120、Rider +140、RubyMine +160、RustRover +180、WebStorm +200）；`findFirstFreePort(desiredPort)` 向上递增；实际端口持久化在 `options/mcpServer.xml`（`McpServerSettings.MyState.mcpServerPort`）；可用系统属性强制端口/强制开启（`IJ_MCP_FORCE_PORT_PROPERTY`/`IJ_MCP_FORCE_ENABLE_PROPERTY`）。**多实例同产品会各自递增抢端口且覆写设置——用户抱怨点（YouTrack IJPL-207839），Idectl 要规避：端口注册表而非单值设置。**
 - **传输**：同一服务器同时挂三套路由——`GET /sse` + `POST /message`（legacy HTTP+SSE，向后兼容）、`/stream`（Streamable HTTP：POST initialize 建 pending transport，`mcp-session-id` 头关联，GET 升级 SSE；自写 `mcpPatched` 胶水而非直接用 SDK 的 `mcpStreamableHttp`，为的是插入 prePhase 拦截）；SSE 心跳 5s；`installHostValidation()` 防 DNS rebinding；`installHttpRequestPropagation()` 把 HTTP 请求上下文传进 tool 调用。
-- **认证**：主全局服务器（用户手动开启）**无 token**，靠 127.0.0.1 + Host 校验 + 工具级确认（brave mode 开关）；另有 `authorizedSession(...)` 启动的**私有服务器**（`DEFAULT_MCP_PRIVATE_PORT = 主端口+100`，供 IDE 内 Junie/AI Assistant 等本地 agent 用）：每会话生成 UUID token，客户端须带自定义头 `IJ_MCP_AUTH_TOKEN`，未知 token → 401；会话选项含 `McpSessionOptions(commandExecutionMode, toolFilter, localAgentId, invocationMode)`——**这就是"按会话过滤工具+分级执行确认"的官方样板，IdeaBridge 的角色模型可直接借鉴其形状，但要更进一步用标准 `Authorization: Bearer` 头**（自定义头对通用客户端不友好）。
+- **认证**：主全局服务器（用户手动开启）**无 token**，靠 127.0.0.1 + Host 校验 + 工具级确认（brave mode 开关）；另有 `authorizedSession(...)` 启动的**私有服务器**（`DEFAULT_MCP_PRIVATE_PORT = 主端口+100`，供 IDE 内 Junie/AI Assistant 等本地 agent 用）：每会话生成 UUID token，客户端须带自定义头 `IJ_MCP_AUTH_TOKEN`，未知 token → 401；会话选项含 `McpSessionOptions(commandExecutionMode, toolFilter, localAgentId, invocationMode)`——**这就是"按会话过滤工具+分级执行确认"的官方样板，Idectl 的角色模型可直接借鉴其形状，但要更进一步用标准 `Authorization: Bearer` 头**（自定义头对通用客户端不友好）。
 - **stdio 桥**：子模块 `mcpserver.stdio`（JVM 进程），环境变量 `IJ_MCP_SERVER_PROJECT_PATH`（把会话绑定到指定项目路径！）与 `IJ_MCP_ALLOWED_TOOLS`；IDE 帮助页给三种客户端配置：SSE / Stdio / HTTP Stream。**项目路由思路可借鉴：连接参数（header 或 stdio env）声明项目路径，服务端据此路由。**
 - **elicitation**：有 `McpElicitationKind.IDE/CLI` 之分——IDE 弹窗确认或走客户端 elicitation。
 - 可规避点小结：端口设置覆写问题；主服务器无 token（我们必须默认有 token）；SSE 与 Stream 双栈维护成本（我们可只做 Streamable HTTP + stdio 桥，SSE legacy 视客户端矩阵决定）。
@@ -238,7 +238,7 @@ class IdeaBridgeServerService(private val cs: CoroutineScope) : Disposable {
 ## 6. 多 IDE 实例：端口与实例发现
 
 - **端口分配**：固定基准端口（建议避开 63342/64342±240 的 JetBrains 段，选如 **48620** 起），`findFirstFreePort` 向上递增；绑定成功后的实际端口写注册表。
-- **注册表模式（推荐，`~/.idea-bridge/instances.json`）**：无跨平台 mDNS 依赖、可离线读取。每实例启动写入条目：
+- **注册表模式（推荐，`~/.idectl/instances.json`）**：无跨平台 mDNS 依赖、可离线读取。每实例启动写入条目：
   ```json
   {
     "instances": [{
@@ -247,12 +247,12 @@ class IdeaBridgeServerService(private val cs: CoroutineScope) : Disposable {
       "ide": "IntelliJ IDEA 2026.1",
       "startedAt": "2026-07-03T10:00:00Z",
       "projects": [{"name": "shop", "path": "/Users/me/ws/shop"}],
-      "tokenHint": "idea-bridge-****"
+      "tokenHint": "idectl-****"
     }]
   }
   ```
   要点：文件锁/原子替换（临时文件+rename）防并发写；启动时清理"pid 不存活或端口探活失败"的僵尸条目；项目 open/close 时更新 projects 数组（`ProjectManagerListener`）。
-- **客户端选实例**：客户端（或我们提供的 `idea-bridge` CLI/stdio 桥）读 instances.json，按"目标项目路径是该实例已打开项目路径的前缀/相等"匹配；命中多个→取最长路径匹配；零命中→列出实例让 Agent 选或报错。也提供 MCP 工具 `list_projects` 让已连接客户端自查路由。
+- **客户端选实例**：客户端（或我们提供的 `idectl` CLI/stdio 桥）读 instances.json，按"目标项目路径是该实例已打开项目路径的前缀/相等"匹配；命中多个→取最长路径匹配；零命中→列出实例让 Agent 选或报错。也提供 MCP 工具 `list_projects` 让已连接客户端自查路由。
 - mDNS（`_mcp._tcp`）无客户端生态支持，不做。JetBrains 自己也没做实例发现（每实例独立端口+设置文件），这是我们相对官方的增强点。
 
 ---
@@ -280,7 +280,7 @@ class IdeaBridgeServerService(private val cs: CoroutineScope) : Disposable {
 | Kotlin 版本要求 | K1 可 | 2024.2 起建议 Kotlin 2.x | 2025.1+ 要求 Kotlin 2.x | 编译目标 2024.2 + K2 即满足 |
 | kotlin-sdk 最低 JVM 11 | IDE 运行时 JBR17 | JBR17/21 | JBR21 | 无冲突；但**编译目标字节码 17**（2024.2+ 平台要求），sinceBuild=233 需确认 233 运行时（JBR17）可跑 |
 | 平台捆绑 ktor client 版本 | 有（较旧） | 有 | 有（3.x） | 自带 ktor server 时避免依赖平台 ktor 的任何传递假设 |
-| IDE 内建 MCP server | ❌ | ❌ | 2025.2+ 捆绑 `com.intellij.mcpServer` | 端口 64342 段被占；**IdeaBridge 与其共存**：不同端口段，不声明对其依赖 |
+| IDE 内建 MCP server | ❌ | ❌ | 2025.2+ 捆绑 `com.intellij.mcpServer` | 端口 64342 段被占；**Idectl 与其共存**：不同端口段，不声明对其依赖 |
 | MCP 协议版本 | n/a | n/a | n/a | 服务器同时接受 `2025-03-26`/`2025-06-18`/`2025-11-25` 协商 |
 
 注意：题目约束"编译目标 IDEA 2024.2+、sinceBuild=233"意味着**编译用 242 SDK、运行下探 233**——所有 242 新 API（如 `currentThreadCoroutineScope`）必须避免或反射降级；建议 CI 用 Plugin Verifier 对 233.x、242.x、251.x、当前最新各跑一遍。

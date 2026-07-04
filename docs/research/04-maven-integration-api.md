@@ -1,15 +1,15 @@
 # 调研报告 04：IntelliJ Maven 集成插件 (org.jetbrains.idea.maven) API
 
-> IdeaBridge 设计阶段调研。调研日期：2026-07-03。
+> Idectl 设计阶段调研。调研日期：2026-07-03。
 > 一手资料来源：github.com/JetBrains/intellij-community（master 分支 ≈ 2026.x，以及 242 分支 = IDEA 2024.2 用于兼容性对照）、plugins.jetbrains.com IntelliJ Platform SDK 文档。所有类名/签名均直接摘自源码，非凭记忆。
 
 ---
 
 ## 1. 概述
 
-IDEA 的 Maven 支持由捆绑插件 `org.jetbrains.idea.maven` 提供（Community 源码位于 `plugins/maven/`，共享模型位于 `plugins/maven-server-api/`）。IdeaBridge 需要的能力全部有对应的编程入口：
+IDEA 的 Maven 支持由捆绑插件 `org.jetbrains.idea.maven` 提供（Community 源码位于 `plugins/maven/`，共享模型位于 `plugins/maven-server-api/`）。Idectl 需要的能力全部有对应的编程入口：
 
-| IdeaBridge 需求 | 核心 API |
+| Idectl 需求 | 核心 API |
 |---|---|
 | 判断是否 Maven 工程 / 模块归属 | `MavenProjectsManager.isMavenizedProject()` / `findProject(Module)` |
 | 触发同步（Reload All） | `MavenProjectsManager.scheduleUpdateAllMavenProjects(MavenSyncSpec)`（异步）或 `forceUpdateAllProjectsOrFindAllAvailablePomFiles()`（工具窗口按钮同款） |
@@ -64,7 +64,7 @@ public MavenImportingSettings getImportingSettings()
 public MavenSyncConsole getSyncConsole()
 ```
 
-注意 `getInstanceIfCreated()`：IdeaBridge 的只读查询（如 MCP tool `maven.listModules`）应优先用它，避免在非 Maven 工程里无谓地实例化服务。`findModule` 标注 `@RequiresReadLock`，必须在 ReadAction 中调用。
+注意 `getInstanceIfCreated()`：Idectl 的只读查询（如 MCP tool `maven.listModules`）应优先用它，避免在非 Maven 工程里无谓地实例化服务。`findModule` 标注 `@RequiresReadLock`，必须在 ReadAction 中调用。
 
 ### 2.2 触发同步/重新导入：2024.x → 2026 的 API 演变
 
@@ -108,7 +108,7 @@ interface MavenSyncSpec {
 2. `FileDocumentManager.getInstance().saveAllDocuments()`（先落盘未保存的 pom 编辑）
 3. `manager.forceUpdateAllProjectsOrFindAllAvailablePomFiles()`
 
-`forceUpdateAllProjectsOrFindAllAvailablePomFiles()` 是 `MavenProjectsManager` 上的 public 便捷方法：若尚无受管 pom 则先扫描发现所有可用 pom，否则等价于 `scheduleUpdateAllMavenProjects(MavenSyncSpec.full(..., explicit=true))`。IdeaBridge 的 `maven.reimport` 工具直接模仿这三步即可（saveAllDocuments 需在 EDT）。
+`forceUpdateAllProjectsOrFindAllAvailablePomFiles()` 是 `MavenProjectsManager` 上的 public 便捷方法：若尚无受管 pom 则先扫描发现所有可用 pom，否则等价于 `scheduleUpdateAllMavenProjects(MavenSyncSpec.full(..., explicit=true))`。Idectl 的 `maven.reimport` 工具直接模仿这三步即可（saveAllDocuments 需在 EDT）。
 来源：<https://github.com/JetBrains/intellij-community/blob/master/plugins/maven/src/main/java/org/jetbrains/idea/maven/project/actions/ReimportAction.kt>
 
 工具窗口另有 `IncrementalSyncAction` → `scheduleUpdateAllMavenProjects(MavenSyncSpec.incremental(...))`，以及 `SyncAllSplitAction`（下拉组合按钮，2025.x 新增）。
@@ -152,7 +152,7 @@ interface MavenSyncListener {
 
 来源：<https://github.com/JetBrains/intellij-community/blob/master/plugins/maven/src/main/java/org/jetbrains/idea/maven/project/MavenSyncListener.kt>
 
-因为是 App 级 Topic，IdeaBridge 应订阅 `ApplicationManager.getApplication().messageBus`，回调里用 `project` 参数路由到对应会话——这天然契合"同一 IDE 多项目、路由给不同 Agent"的需求。plugin.xml 声明式注册用 `<applicationListeners>`。
+因为是 App 级 Topic，Idectl 应订阅 `ApplicationManager.getApplication().messageBus`，回调里用 `project` 参数路由到对应会话——这天然契合"同一 IDE 多项目、路由给不同 Agent"的需求。plugin.xml 声明式注册用 `<applicationListeners>`。
 
 #### MavenImportListener（旧，Project 级，部分方法已建议迁移）
 
@@ -187,13 +187,13 @@ void artifactDownloadingScheduled();  void artifactDownloadingStarted();  void a
 2. **MavenSyncConsole**（`org.jetbrains.idea.maven.buildtool.MavenSyncConsole`，经 `manager.getSyncConsole()` 获得）：内部有 `hasErrors` 标志、`addException(e: Throwable)`、`showProblem(problem)`、`addBuildIssue(issue, kind)`、`finishImport(...)`、`startTransaction()/finishTransaction(...)`。但多数成员 internal，**不应作为稳定读取通道**，仅知晓其存在即可；错误同样会经 Build 工具窗口的 `BuildProgressListener`（`build` 系统的 `SyncViewManager`）发布，如需完整文本可订阅 build events。
 3. 若用 `suspend fun updateAllMavenProjects(spec)`，恢复执行即代表流程结束，随后立刻读 `problems` 即可，无需监听 Topic。
 
-Kotlin 草图（IdeaBridge `maven.sync` 工具）：
+Kotlin 草图（Idectl `maven.sync` 工具）：
 
 ```kotlin
 suspend fun syncProject(project: Project): MavenSyncResult {
   val manager = MavenProjectsManager.getInstance(project)
   withContext(Dispatchers.EDT) { FileDocumentManager.getInstance().saveAllDocuments() }
-  manager.updateAllMavenProjects(MavenSyncSpec.full("IdeaBridge.mcp.sync", true))
+  manager.updateAllMavenProjects(MavenSyncSpec.full("Idectl.mcp.sync", true))
   val problems = manager.projects.flatMap { p ->
     p.problems.map { SyncProblem(p.path, it.type.name, it.description) }
   }
@@ -251,7 +251,7 @@ public @NotNull Collection<String> getEnabledProfiles()
 public @NotNull Collection<String> getDisabledProfiles()
 ```
 
-IDE 自带 `ToggleProfileAction` 的实现方式即：`getExplicitProfiles().clone()` → 修改 enabled/disabled 集合 → `setExplicitProfiles(newProfiles)`；切到 IMPLICIT 状态 = 从两个集合中都移除。IdeaBridge `maven.setProfiles` 照此实现即可，切换后同步会被自动调度。
+IDE 自带 `ToggleProfileAction` 的实现方式即：`getExplicitProfiles().clone()` → 修改 enabled/disabled 集合 → `setExplicitProfiles(newProfiles)`；切到 IMPLICIT 状态 = 从两个集合中都移除。Idectl `maven.setProfiles` 照此实现即可，切换后同步会被自动调度。
 来源：<https://github.com/JetBrains/intellij-community/blob/master/plugins/maven/src/main/java/org/jetbrains/idea/maven/project/actions/ToggleProfileAction.java>、<https://github.com/JetBrains/intellij-community/blob/master/plugins/maven-server-api/src/main/java/org/jetbrains/idea/maven/model/MavenExplicitProfiles.java>
 
 ### 2.6 执行 Maven goal
@@ -294,7 +294,7 @@ public static @NotNull RunnerAndConfigurationSettings createRunnerAndConfigurati
     ..., @NotNull String name, boolean isDelegate)
 ```
 
-**已核实的内部实现**：`runConfiguration` 构造 `ExecutionEnvironment(DefaultRunExecutor, DefaultJavaProgramRunner/DelegateBuildRunner, configSettings, project)` 后 `runner.execute(environment)`——即完整走标准执行管线。**结论：会触发 `ExecutionManager.EXECUTION_TOPIC`（processStarting/processStarted）、产生 `RunContentDescriptor` 与 `ProcessHandler`，IdeaBridge 的通用控制台捕获层（调研主题 3 的 ExecutionListener + ProcessListener 方案）无需为 Maven 做特殊处理即可复用。** `ProgramRunner.Callback.processStarted(RunContentDescriptor)` 还能拿到本次执行的 descriptor，便于把"MCP 发起的 goal 执行"与会话精确关联。
+**已核实的内部实现**：`runConfiguration` 构造 `ExecutionEnvironment(DefaultRunExecutor, DefaultJavaProgramRunner/DelegateBuildRunner, configSettings, project)` 后 `runner.execute(environment)`——即完整走标准执行管线。**结论：会触发 `ExecutionManager.EXECUTION_TOPIC`（processStarting/processStarted）、产生 `RunContentDescriptor` 与 `ProcessHandler`，Idectl 的通用控制台捕获层（调研主题 3 的 ExecutionListener + ProcessListener 方案）无需为 Maven 做特殊处理即可复用。** `ProgramRunner.Callback.processStarted(RunContentDescriptor)` 还能拿到本次执行的 descriptor，便于把"MCP 发起的 goal 执行"与会话精确关联。
 
 另一条更手动的路线：`createRunnerAndConfigurationSettings(...)` 拿到 `RunnerAndConfigurationSettings` 后交给 `ExecutionUtil.runConfiguration(settings, executor)`，还可先 `RunManager.getInstance(project).addConfiguration(settings)` 持久化成用户可见的运行配置（工具窗口"Run Configurations"节点即 `MavenRunConfigurationType` 类型的配置列表）。
 
@@ -313,7 +313,7 @@ public boolean runBatch(List<MavenRunnerParameters> commands,
 // + 重载：@Nullable Consumer<? super ProcessHandler> onAttach、boolean isDelegateBuild
 ```
 
-`runBatch` 是阻塞式（配 ProgressIndicator），`onAttach` 能拿到 `ProcessHandler` 做输出捕获；但它不产生 Run 工具窗口标签页。**IdeaBridge 建议默认走 `MavenRunConfigurationType.runConfiguration`**，让 Agent 与人类用户看到同样的运行标签页。
+`runBatch` 是阻塞式（配 ProgressIndicator），`onAttach` 能拿到 `ProcessHandler` 做输出捕获；但它不产生 Run 工具窗口标签页。**Idectl 建议默认走 `MavenRunConfigurationType.runConfiguration`**，让 Agent 与人类用户看到同样的运行标签页。
 
 #### MavenRunnerSettings（JVM 参数 / skipTests 等）
 
@@ -379,7 +379,7 @@ class ArtifactDownloadResult {
 }
 ```
 
-**兼容性警告**：这是本调研发现的最大版本断层——若 IdeaBridge 要求 sinceBuild=233 单一二进制兼容到 2026.x，`downloadArtifacts` 的四参重载与 request 重载不同时存在于所有版本，直接编译期绑定会在某端 `NoSuchMethodError`。缓解方案见 §5。工具窗口对应按钮类：`DownloadAllSourcesAction` / `DownloadAllDocsAction` / `DownloadAllSourcesAndDocsAction`（及 Selected 变体，位于 `org.jetbrains.idea.maven.project.actions`）。
+**兼容性警告**：这是本调研发现的最大版本断层——若 Idectl 要求 sinceBuild=233 单一二进制兼容到 2026.x，`downloadArtifacts` 的四参重载与 request 重载不同时存在于所有版本，直接编译期绑定会在某端 `NoSuchMethodError`。缓解方案见 §5。工具窗口对应按钮类：`DownloadAllSourcesAction` / `DownloadAllDocsAction` / `DownloadAllSourcesAndDocsAction`（及 Selected 变体，位于 `org.jetbrains.idea.maven.project.actions`）。
 来源：<https://github.com/JetBrains/intellij-community/blob/242/plugins/maven/src/main/java/org/jetbrains/idea/maven/project/MavenProjectsManagerEx.kt>、<https://github.com/JetBrains/intellij-community/blob/master/plugins/maven/src/main/java/org/jetbrains/idea/maven/project/actions/DownloadAllSourcesAndDocsAction.kt>
 
 ### 2.8 忽略的 pom 与受管 pom 管理
@@ -418,7 +418,7 @@ public synchronized void removeManagedFiles(@NotNull List<VirtualFile> files);  
 | Profiles 勾选 | `ToggleProfileAction` / `ResetProfilesAction` | `get/setExplicitProfiles` |
 | 生成源码目录更新 | `UpdateFoldersAction` | `updateProjectTargetFolders()` |
 | Run Configurations 节点 | —（RunManager 数据） | `RunManager` 中 `MavenRunConfigurationType` 类型的配置 |
-| Show Effective POM | `MavenShowEffectivePom` | `MavenEmbeddersManager` 相关（IdeaBridge 可选） |
+| Show Effective POM | `MavenShowEffectivePom` | `MavenEmbeddersManager` 相关（Idectl 可选） |
 
 （Action 类清单经 GitHub API 列目录核实：<https://github.com/JetBrains/intellij-community/tree/master/plugins/maven/src/main/java/org/jetbrains/idea/maven/project/actions>）
 
@@ -430,26 +430,26 @@ SDK 文档（<https://plugins.jetbrains.com/docs/intellij/plugin-dependencies.ht
 
 ```xml
 <idea-plugin>
-  <id>com.ideabridge</id>
+  <id>com.niandui.idectl</id>
   <depends>com.intellij.modules.platform</depends>
   <depends>com.intellij.java</depends>
   <!-- Maven 可选依赖 -->
-  <depends optional="true" config-file="ideabridge-maven.xml">org.jetbrains.idea.maven</depends>
+  <depends optional="true" config-file="idectl-maven.xml">org.jetbrains.idea.maven</depends>
 </idea-plugin>
 ```
 
-**ideabridge-maven.xml**（必须与 plugin.xml 同目录 META-INF/；命名建议 `myPluginId-$NAME$.xml` 以避免 classloader 冲突）：
+**idectl-maven.xml**（必须与 plugin.xml 同目录 META-INF/；命名建议 `myPluginId-$NAME$.xml` 以避免 classloader 冲突）：
 
 ```xml
 <idea-plugin>
   <!-- 所有 import org.jetbrains.idea.maven.* 的类只能注册在这里 -->
   <applicationListeners>
-    <listener class="com.ideabridge.maven.IdeaBridgeMavenSyncListener"
+    <listener class="com.niandui.idectl.maven.IdectlMavenSyncListener"
               topic="org.jetbrains.idea.maven.project.MavenSyncListener"/>
   </applicationListeners>
-  <extensions defaultExtensionNs="com.ideabridge">
+  <extensions defaultExtensionNs="com.niandui.idectl">
     <!-- 自定义 EP：Maven 能力提供者实现 -->
-    <mavenFacade implementation="com.ideabridge.maven.MavenFacadeImpl"/>
+    <mavenFacade implementation="com.niandui.idectl.maven.MavenFacadeImpl"/>
   </extensions>
 </idea-plugin>
 ```
@@ -472,7 +472,7 @@ dependencies {
 
 ## 3. 线程模型注意事项
 
-1. **suspend API 优先**：`updateAllMavenProjects` / `downloadArtifacts` 是 suspend 函数，IdeaBridge 应在插件级 `CoroutineScope`（构造注入的 project-scope）中调用；**不要在 EDT 上 runBlocking**。IDE 自己的 action 也是 `cs.launch { manager.downloadArtifacts(request) }` 模式。
+1. **suspend API 优先**：`updateAllMavenProjects` / `downloadArtifacts` 是 suspend 函数，Idectl 应在插件级 `CoroutineScope`（构造注入的 project-scope）中调用；**不要在 EDT 上 runBlocking**。IDE 自己的 action 也是 `cs.launch { manager.downloadArtifacts(request) }` 模式。
 2. **schedule 版本线程无关**：`scheduleUpdateAllMavenProjects` / `scheduleDownloadArtifacts` 可从任意线程调用（fire-and-forget），适合 MCP "触发后立刻返回 + 事件推送进度"的形态。
 3. **EDT 必需**：`FileDocumentManager.saveAllDocuments()`（reimport 前置步骤）、`MavenRunConfigurationType.runConfiguration(...)`（内部创建 `ExecutionEnvironment` 并 `runner.execute`，须 EDT——与所有 RunConfiguration 启动一致）、`ProgramRunner.Callback` 回调在 EDT。
 4. **ReadAction 必需**：`findModule(MavenProject)` 标注 `@RequiresReadLock`；凡触碰 `Module`/workspace model 的读取包 `readAction { }`（协程）或 `ReadAction.compute`。`getProjects()`/`findProject(VirtualFile)`/`problems` 等读的是 Maven 自身的 tree 快照（内部锁），无需 IDE read lock，但拿 `VirtualFile`→`Module` 映射时需要。
@@ -509,9 +509,9 @@ dependencies {
 1. **downloadArtifacts 签名断层**：单 jar 兼容 233~2026 时，建议：(a) 反射探测两种签名择一调用；或 (b) 用 Gradle `pluginVersion` 分渠道构建；或 (c) 退而求其次触发 IDE action（`ActionManager.getAction("Maven.DownloadAllSourcesAndDocs")` 之类，需核实 action id）以规避二进制绑定。
 2. **`MavenSyncSpec` 是 Experimental API**：包名 `org.jetbrains.idea.maven.buildtool`（易误写成 project 包）；JetBrains 保留改动权。保底路径是 `forceUpdateAllProjectsOrFindAllAvailablePomFiles()`（非 experimental、跨版本存在）。
 3. **`syncFinished` 无成败标志**：必须自行汇总 `MavenProject.problems`；且 `MavenSyncConsole` 的错误状态多为 internal 成员，不能直接读。注意 `syncFinished` 时"插件解析与源码下载可能尚未完成"（源码注释原话），MCP 上报"同步完成"应说明该语义。
-4. **App 级 Topic 的多项目路由**：`MavenSyncListener.TOPIC` 是 `@Topic.AppLevel`，一个订阅收到所有 project 的事件，必须用回调参数 `project` 过滤——这对 IdeaBridge 是特性而非坑，但漏过滤会把 A 项目的同步事件推给绑定 B 项目的 Agent。
+4. **App 级 Topic 的多项目路由**：`MavenSyncListener.TOPIC` 是 `@Topic.AppLevel`，一个订阅收到所有 project 的事件，必须用回调参数 `project` 过滤——这对 Idectl 是特性而非坑，但漏过滤会把 A 项目的同步事件推给绑定 B 项目的 Agent。
 5. **同步的并发语义**：Maven 插件内部对同步做了排队/合并（连续 schedule 会合并为一次），MCP 层不必自己做互斥，但"我触发的这次"与"IDE 自动触发的一次"不可区分——`MavenSyncSpec` 的 description 不会出现在监听器回调中。如需精确关联，建议用 suspend 版 `updateAllMavenProjects` 串行等待而非 Topic。
-6. **Untrusted project**：Reload 前 IDE 会做 trust 确认（`confirmLoadingUntrustedProject`）。Headless/MCP 触发时若项目未受信任，同步可能被拒或弹窗挂起；IdeaBridge 应先检查 `TrustedProjects` 状态并向 Agent 返回明确错误。
+6. **Untrusted project**：Reload 前 IDE 会做 trust 确认（`confirmLoadingUntrustedProject`）。Headless/MCP 触发时若项目未受信任，同步可能被拒或弹窗挂起；Idectl 应先检查 `TrustedProjects` 状态并向 Agent 返回明确错误。
 7. **`MavenProjectsManager.getInstance()` 类加载**：在核心（非 optional）classloader 中引用会直接 `ClassNotFoundException`（JetBrains 论坛多例）。所有 Maven 类型必须隔离在 optional descriptor 注册的类里，包括方法签名与 catch 子句。
 8. **`findModule` 需 ReadLock、`getProjects()` 是快照**：同步进行中读到的树可能是旧的；`isInitialized()` 为 false 时（启动早期）多数查询返回空。
 9. **runBatch 无 Run 窗口**：`MavenRunner.run/runBatch` 走 descriptor-less 执行，不产生 Run 内容标签，用户不可见；与"人机共视"目标冲突，仅适合内部静默任务。

@@ -1,6 +1,6 @@
 # 调研报告 02：IntelliJ 平台"运行/调试"控制 API 与 XDebugger
 
-> 项目：IdeaBridge（IDE 内嵌 MCP Server，供外部 AI Agent 控制 IDEA）
+> 项目：Idectl（IDE 内嵌 MCP Server，供外部 AI Agent 控制 IDEA）
 > 调研日期：2026-07-03
 > 目标平台：IDEA 2024.2+（sinceBuild=233，无 untilBuild）
 > 资料来源：IntelliJ Platform SDK 官方文档（plugins.jetbrains.com/docs/intellij）与 JetBrains/intellij-community master 及 233 分支源码（均为一手查证，非记忆）。
@@ -15,10 +15,10 @@ IntelliJ 平台的运行/调试体系分为三层：
 2. **执行层（ExecutionManager / ExecutionEnvironment / ProgramRunner / Executor / ProcessHandler / RunContentDescriptor）**：把一个 RunProfile 用某个 Executor（Run/Debug/Coverage）真正跑起来，并管理 Run 工具窗口的内容 Tab。生命周期事件走 message bus 的 `ExecutionManager.EXECUTION_TOPIC`。
 3. **调试层（XDebugger：XDebuggerManager / XDebugSession / XBreakpointManager / XSuspendContext...）**：语言无关的调试器框架。Java 调试的具体实现（JavaLineBreakpointType、JavaDebugProcess）在 `com.intellij.java` 插件的 debugger 模块中。
 
-对 IdeaBridge 的关键结论（详见后文）：
+对 Idectl 的关键结论（详见后文）：
 
 - **列举/查找配置**：`RunManager.getInstance(project).allSettings` 等 API 完备且稳定，可满足"多项目多配置路由"。
-- **编程启动**：首选 `ExecutionUtil.runConfiguration(settings, executor)` 或 `ExecutionEnvironmentBuilder.create(executor, settings).buildAndExecute()`；拿 `ProcessHandler` 有两条路：`ProgramRunner.Callback`（只对本次启动）或订阅 `EXECUTION_TOPIC`（能覆盖**用户手动点绿色按钮**启动的会话——这是 IdeaBridge 控制台跟踪的关键）。
+- **编程启动**：首选 `ExecutionUtil.runConfiguration(settings, executor)` 或 `ExecutionEnvironmentBuilder.create(executor, settings).buildAndExecute()`；拿 `ProcessHandler` 有两条路：`ProgramRunner.Callback`（只对本次启动）或订阅 `EXECUTION_TOPIC`（能覆盖**用户手动点绿色按钮**启动的会话——这是 Idectl 控制台跟踪的关键）。
 - **停止/重启/枚举**：`ExecutionManager.getRunningProcesses()`、`RunContentManager.getAllDescriptors()`、`ProcessHandler.destroyProcess()`、`ExecutionUtil.restart(descriptor)`。
 - **调试控制**：`XDebuggerManager.getDebugSessions()` + `XDebugSession` 的 pause/resume/step 系列 API 完整；断点用 `XBreakpointManager.addLineBreakpoint(type, fileUrl, line, properties)`；帧/变量/求值全部是**异步回调模型**，需要自行桥接成 MCP 的同步/流式响应（建议 suspend + CompletableFuture/Channel 包装 + 超时）。
 - **临时/程序化建配置**：`RunManager.createConfiguration(name, factory)` + 强类型 mutate（如 `ApplicationConfiguration.setMainClassName`）完全可行；不想污染用户配置列表可用 `setTemporaryConfiguration()` 或干脆不 `addConfiguration` 直接执行。
@@ -68,7 +68,7 @@ fun suggestUniqueName(name: String?, type: ConfigurationType?): String
 abstract fun hasSettings(settings: RunnerAndConfigurationSettings): Boolean
 ```
 
-注意：`findConfigurationByName` 只按名字，**同名不同类型会撞**；IdeaBridge 的 MCP 工具应以 `(projectName, typeId, name)` 三元组做寻址，落到 `findConfigurationByTypeAndName(typeId, name)`。
+注意：`findConfigurationByName` 只按名字，**同名不同类型会撞**；Idectl 的 MCP 工具应以 `(projectName, typeId, name)` 三元组做寻址，落到 `findConfigurationByTypeAndName(typeId, name)`。
 
 #### RunnerAndConfigurationSettings 结构
 
@@ -164,12 +164,12 @@ DefaultDebugExecutor.getDebugExecutorInstance()
 #### 启动线程要求
 
 - `ExecutionUtil.doRunConfiguration` 内部逻辑（master 源码已查证）："如果当前在 EDT，则通过 ProgressManager 以 blocking read action 同步执行 builder；否则直接执行"——即 **`ExecutionUtil.runConfiguration` 可以在 EDT 或后台线程调用**，它自己处理线程切换；错误通知用 `UIUtil.invokeLaterIfNeeded` 回 EDT。
-- 但 `ProgramRunnerUtil.executeConfiguration` 及很多 ProgramRunner 实现历史上假定 EDT。**IdeaBridge 稳妥策略：MCP 请求线程（Ktor/协程）→ `withContext(Dispatchers.EDT)`（或 `ApplicationManager.getApplication().invokeLater`）→ 调启动 API**，随后通过监听器异步等待 processStarted。
+- 但 `ProgramRunnerUtil.executeConfiguration` 及很多 ProgramRunner 实现历史上假定 EDT。**Idectl 稳妥策略：MCP 请求线程（Ktor/协程）→ `withContext(Dispatchers.EDT)`（或 `ApplicationManager.getApplication().invokeLater`）→ 调启动 API**，随后通过监听器异步等待 processStarted。
 - 已废弃提示：`XDebuggerManager.startSession` 标注 `@RequiresEdt`，印证"启动动作在 EDT"是平台默认约定。
 
 #### 如何拿到启动后的 ProcessHandler / RunContentDescriptor / executionId
 
-三种方式，IdeaBridge 应组合使用：
+三种方式，Idectl 应组合使用：
 
 1. **`ProgramRunner.Callback.processStarted(RunContentDescriptor)`**：随 `build(callback)` 或 `executeConfigurationAsync(..., callback)` 传入；只覆盖自己发起的启动。
 2. **`ExecutionManager.EXECUTION_TOPIC`**（见 2.3）：覆盖**所有**启动，包括用户点绿色按钮的——这是构建"会话注册表 + 控制台增量缓冲"的正解。回调里 `env.executionId`（`long`，`ExecutionEnvironment.getExecutionId()`，每次执行分配的全局自增 id，`assignNewExecutionId(): long` 可重分配）可作为 MCP 侧 session handle。
@@ -208,7 +208,7 @@ default void processTerminated(@NotNull String executorId, @NotNull ExecutionEnv
 - **exitCode 直接由 `processTerminated` 给出**（int 参数），比轮询 `ProcessHandler.getExitCode()` 可靠。
 - 三参 `processStarting(…, handler)` 在 `startNotify()` **之前**触发——这是**在首行输出产生前挂 `ProcessListener` 抓全量控制台输出**的唯一保险时机（`processStarted` 时早期输出理论上已可能开始流动，但 startNotify 语义保证 text 事件在 startNotify 后才 fire，因此二者都可用；用 processStarting 更稳）。
 - 线程：topic 事件在发布者线程同步分发，**不保证 EDT**；listener 内不要做慢操作，转发到自己的协程/队列。
-- 用户手动点 Run 按钮同样走这条 topic → IdeaBridge 的会话注册表天然覆盖手动会话。
+- 用户手动点 Run 按钮同样走这条 topic → Idectl 的会话注册表天然覆盖手动会话。
 
 ### 2.4 枚举运行中进程、停止、重启、exitCode
 
@@ -321,7 +321,7 @@ default void breakpointsMuted(boolean muted)
 
 要点：
 
-- 会话与进程的关联：`XDebugSession.getRunContentDescriptor().getProcessHandler()`，或反向 `XDebuggerManager.getDebugSession(descriptor.executionConsole)`。IdeaBridge 会话注册表应存 `(executionId, processHandler, descriptor, xDebugSession?)`。
+- 会话与进程的关联：`XDebugSession.getRunContentDescriptor().getProcessHandler()`，或反向 `XDebuggerManager.getDebugSession(descriptor.executionConsole)`。Idectl 会话注册表应存 `(executionId, processHandler, descriptor, xDebugSession?)`。
 - pause/resume/step 从任意线程调用通常是安全的（内部转给 debug process 的命令队列），但平台大量调用点在 EDT；**统一在 EDT 调用最稳**。
 - `sessionPaused` 触发时 `getSuspendContext()` 才非空；MCP 的 `wait_for_breakpoint` 工具可实现为"挂 listener + suspend 直到 sessionPaused（带超时）"。
 
@@ -443,7 +443,7 @@ suspend fun evaluate(session: XDebugSession, expr: String, timeoutMs: Long = 10_
 }
 ```
 
-**安全提示**：表达式求值 ≈ 在被调试 JVM 内执行任意代码（可调用任意方法），必须限定为 IdeaBridge 的"管理员"角色权限。
+**安全提示**：表达式求值 ≈ 在被调试 JVM 内执行任意代码（可调用任意方法），必须限定为 Idectl 的"管理员"角色权限。
 
 ### 2.8 临时/程序化创建 RunConfiguration
 
@@ -453,7 +453,7 @@ suspend fun evaluate(session: XDebugSession, expr: String, timeoutMs: Long = 10_
 
 ```kotlin
 val runManager = RunManager.getInstance(project)
-val settings = runManager.createConfiguration("IdeaBridge: Main", ApplicationConfigurationType::class.java)
+val settings = runManager.createConfiguration("Idectl: Main", ApplicationConfigurationType::class.java)
 (settings.configuration as ApplicationConfiguration).apply {
     mainClassName = "com.example.Main"
     setModule(module)                 // 或 configurationModule.module = ...
@@ -494,7 +494,7 @@ JUnit 方法级配置：`JUnitConfiguration`（plugins/junit）有 `beginMethod/
 - 本报告列出的 RunManager / ExecutionListener / ExecutionEnvironment(Builder) / ProgramRunnerUtil / ExecutionUtil / ProcessHandler / RunContentManager / XDebuggerManager / XDebugSession / XBreakpointManager 核心签名在 233 与 master 之间**均稳定存在**（ExecutionListener 各回调、EXECUTION_TOPIC、getRunningProcesses、addLineBreakpoint 等已分别在 master 源码验证，XBreakpointManagerImpl 另在 233 分支验证）。
 - 变化点：
   - `ExecutionManager.getRunningDescriptors` 在新版本标注 `@ApiStatus.Internal` → 用 `RunContentManager.getAllDescriptors()` 替代。
-  - `XDebuggerManager.startSession/startSessionAndShowTab` 已 `@Deprecated`，新 API 为 `newSessionBuilder()`（仅自实现 debug process 才用得到，IdeaBridge 不需要）。
+  - `XDebuggerManager.startSession/startSessionAndShowTab` 已 `@Deprecated`，新 API 为 `newSessionBuilder()`（仅自实现 debug process 才用得到，Idectl 不需要）。
   - `XDebugSessionListener.stackFrameChanged(boolean)` 为 `@ApiStatus.Experimental`（较新版本新增）；`settingsChangedFromFrontend` 为 Internal（Remote Dev/前后端分离架构产物）。
   - `XBreakpointManager.findBreakpointsAtLine` 带 `XLineBreakpointVerticalPlacement` 的重载是新加的（inline breakpoints，2024.x+）；基础重载 233 可用。
   - 2024.3+ XDebugger 内部大量向 Remote Dev "split" 架构迁移（XDebugSessionProxy 等 Internal 类出现），**只用 xdebugger-api 公开接口即可免疫**。
@@ -503,17 +503,17 @@ JUnit 方法级配置：`JUnitConfiguration`（plugins/junit）有 `beginMethod/
 
 ## 5. 已知坑与限制
 
-1. **单实例确认对话框**：对 `isAllowRunningInParallel()==false` 的配置重复启动，平台可能弹 "Process is running, stop and restart?" 模态框，MCP 场景会卡死请求。规避：启动前自查该配置是否有 running descriptor，主动 stop-and-wait 或返回冲突错误（并发语义：把它做成 IdeaBridge 的显式冲突码）。
+1. **单实例确认对话框**：对 `isAllowRunningInParallel()==false` 的配置重复启动，平台可能弹 "Process is running, stop and restart?" 模态框，MCP 场景会卡死请求。规避：启动前自查该配置是否有 running descriptor，主动 stop-and-wait 或返回冲突错误（并发语义：把它做成 Idectl 的显式冲突码）。
 2. **`processNotStarted`**：启动失败（如 runner 抛 ExecutionException、before-launch task 失败/被取消）走 `processNotStarted` 而非 exception 抛给调用方——MCP start 工具必须同时监听 started 与 notStarted，否则请求悬挂。
-3. **before-launch tasks（默认含 Build）**：executeConfiguration 会先跑配置挂的 Build 任务，构建失败则 processNotStarted。这与 IdeaBridge 的"构建互斥"设计相关：Agent 触发的 run 隐式触发构建，需与显式 build 工具共享同一互斥锁语义。
-4. **控制台历史不可回读**：`ConsoleView` 不提供可靠的"读回全部已打印文本"公开 API。IdeaBridge 必须**自建 ring buffer**：在 `processStarting(handler)` 挂 `ProcessListener.onTextAvailable(event, outputType)` 自己缓存（区分 stdout/stderr/system），offset/tail/grep 都在自建缓冲上做。对 MCP 连接之前就已在跑的会话，历史输出**拿不到**（只能从挂上 listener 那刻起），插件应在 IDE 启动即订阅而不是首个 MCP 连接时才订阅。
+3. **before-launch tasks（默认含 Build）**：executeConfiguration 会先跑配置挂的 Build 任务，构建失败则 processNotStarted。这与 Idectl 的"构建互斥"设计相关：Agent 触发的 run 隐式触发构建，需与显式 build 工具共享同一互斥锁语义。
+4. **控制台历史不可回读**：`ConsoleView` 不提供可靠的"读回全部已打印文本"公开 API。Idectl 必须**自建 ring buffer**：在 `processStarting(handler)` 挂 `ProcessListener.onTextAvailable(event, outputType)` 自己缓存（区分 stdout/stderr/system），offset/tail/grep 都在自建缓冲上做。对 MCP 连接之前就已在跑的会话，历史输出**拿不到**（只能从挂上 listener 那刻起），插件应在 IDE 启动即订阅而不是首个 MCP 连接时才订阅。
 5. **行号基准不一致**：XLineBreakpoint/Document 是 0-based，编辑器 UI 与用户直觉是 1-based。协议里必须写清并统一转换。
 6. **断点不等于可命中**：`addLineBreakpoint` 对任何行都会成功；无效行的断点在会话中显示为灰/叉。可用 `JavaLineBreakpointType.canPutAt(file, line, project)`（需 ReadAction，PSI）先校验。
 7. **求值超时与副作用**：evaluate 回调可能永不到达（目标 JVM 全线程挂起于非断点状态、死锁）；且求值可触发副作用/类加载。必须 `withTimeout` + 权限门槛 + 审计日志。
 8. **computeChildren 分页**：大集合平台默认每批 100 个子节点（`XCompositeNode.tooManyChildren`），MCP 变量工具要处理 "has more" 语义，避免一次拉爆。
 9. **detach vs destroy 对 Remote Debug**：Remote JVM Debug 会话 stop 的默认语义是 detach（目标进程继续跑）；本地进程是 destroy。MCP stop 工具的文案与行为要按 descriptor 类型区分。
-10. **多项目路由**：所有 service（RunManager/ExecutionManager/XDebuggerManager/RunContentManager）与两个 Topic 全是 project-level。IdeaBridge 必须为每个 open project 建立独立订阅与注册表，`ProjectManager.getInstance().openProjects` 枚举 + `ProjectManagerListener` 跟踪开关；MCP 会话绑定 project 后所有句柄查找都限定在该 project 的注册表内。
-11. **executionId 复用**：Rerun 时若未 `assignNewExecutionId`，id 可能沿用；IdeaBridge 最好用自己的 UUID 做 MCP session handle，内部映射到 `(project, executionId, processHandler)`，以 processHandler 身份为准。
+10. **多项目路由**：所有 service（RunManager/ExecutionManager/XDebuggerManager/RunContentManager）与两个 Topic 全是 project-level。Idectl 必须为每个 open project 建立独立订阅与注册表，`ProjectManager.getInstance().openProjects` 枚举 + `ProjectManagerListener` 跟踪开关；MCP 会话绑定 project 后所有句柄查找都限定在该 project 的注册表内。
+11. **executionId 复用**：Rerun 时若未 `assignNewExecutionId`，id 可能沿用；Idectl 最好用自己的 UUID 做 MCP session handle，内部映射到 `(project, executionId, processHandler)`，以 processHandler 身份为准。
 12. **JetBrains 内置 MCP server 撞车**：intellij-community 已内置 `plugins/mcp-server`（`com.intellij.mcpserver`，含运行配置执行工具与 ExecutionUtilTest）。设计阶段应：a) 通读其工具集避免语义冲突；b) 考虑端口/命名隔离；c) 评估"扩展官方 MCP server 的 EP"替代自建 server 的可行性。
 
 ## 6. 参考来源

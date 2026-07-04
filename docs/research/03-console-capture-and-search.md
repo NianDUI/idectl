@@ -1,13 +1,13 @@
 # 调研报告 03：以编程方式捕获与检索运行/调试控制台输出
 
-> IdeaBridge 设计调研 · 2026-07 · 目标平台：IntelliJ IDEA 2024.2+（plugin.xml sinceBuild=233，无 untilBuild）
+> Idectl 设计调研 · 2026-07 · 目标平台：IntelliJ IDEA 2024.2+（plugin.xml sinceBuild=233，无 untilBuild）
 > 本报告所有类名/方法签名均对照 `github.com/JetBrains/intellij-community` master 分支源码与 IntelliJ Platform SDK 官方文档核实，来源见文末。
 
 ---
 
 ## 1. 概述
 
-IdeaBridge 需要把 IDE 内每个运行/调试会话（含用户手动点绿色按钮启动的会话）的控制台输出，变成 MCP 工具可增量读取（offset/tail）、可服务端检索（正则 grep + 上下文）的数据源。核心结论先行：
+Idectl 需要把 IDE 内每个运行/调试会话（含用户手动点绿色按钮启动的会话）的控制台输出，变成 MCP 工具可增量读取（offset/tail）、可服务端检索（正则 grep + 上下文）的数据源。核心结论先行：
 
 1. **不要从 `ConsoleView` 读回文本**。`ConsoleViewImpl` 位于 `platform/lang-impl` 的 impl 包（非稳定 API，且 master 已改写为 Kotlin），其文本先进入延迟 `TokenBuffer`（默认 200ms 才 flush 到 `Document`），`Document` 又受 cycle buffer（默认 1024KB）裁剪，Editor 懒创建（工具窗未展开时可能为 null），读取还受 EDT/ReadAction 约束。**正确方案是自建缓冲**：在进程输出的源头 `ProcessHandler` 上挂 `ProcessListener`，把文本写入插件自己的环形缓冲。
 2. **挂监听的时机是 `ExecutionListener.processStarting(executorId, env, handler)`**。源码 javadoc 明确它 "Called before `ProcessHandler#startNotify()`"；而 `OSProcessHandler` 从 `startNotify()` 才开始泵读子进程 stdout/stderr，所以在 `processStarting` 挂监听保证零丢失。`processStartScheduled` 更早但此时还拿不到 `ProcessHandler`。该 Topic（`ExecutionManager.EXECUTION_TOPIC`）覆盖**一切**经 Run Configuration 启动的会话——包括用户手点绿色按钮——因为它们都走 `ExecutionManager`。
@@ -79,7 +79,7 @@ abstract fun getRunningDescriptors(condition: Condition<in RunnerAndConfiguratio
 
 ```xml
 <projectListeners>
-  <listener class="cn.ideabridge.execution.IdeaBridgeExecutionListener"
+  <listener class="com.niandui.idectl.execution.IdectlExecutionListener"
             topic="com.intellij.execution.ExecutionListener"/>
 </projectListeners>
 ```
@@ -146,7 +146,7 @@ public interface ColoredTextAcceptor {
 
 内部：按 stdout/stderr 各持一个 `AnsiStreamingLexer`（**有跨 chunk 状态**，转义序列可能被 chunk 边界劈开），把 SGR 序列喂给 `AnsiTerminalEmulator`，再经 `ColoredOutputTypeRegistry.getOutputType()` 映射为带颜色的 `ProcessOutputType` 子类型；非 SGR 控制序列被剥离丢弃。
 
-对 IdeaBridge 的含义：
+对 Idectl 的含义：
 
 - 若目标 handler 是 `ColoredProcessHandler`（Spring Boot/Gradle/Maven 运行配置基本都是），我们在 `onTextAvailable` 收到的**已是剥好转义的纯文本** + 颜色子类型 Key，直接入缓冲即可（可选：把颜色 key 名一并存为元数据）。
 - 若是普通 `OSProcessHandler`，文本可能含原始 `[...m`。方案：**每个会话自持一个 `AnsiEscapeDecoder`**（切勿多会话共享——lexer 有状态），在监听器里 `decoder.escapeText(text, outputType) { plain, key -> buffer.append(plain, key) }`。
@@ -337,7 +337,7 @@ project.service<SyncViewManager>().addListener(bridgeSyncListener, disposable)  
 ### 2.10 端到端 Kotlin 草图
 
 ```kotlin
-class IdeaBridgeExecutionListener(private val project: Project) : ExecutionListener {
+class IdectlExecutionListener(private val project: Project) : ExecutionListener {
 
   override fun processStartScheduled(executorId: String, env: ExecutionEnvironment) {
     SessionRegistry.getInstance(project).preRegister(env) // 分配 sessionId, 记录配置名/executor
