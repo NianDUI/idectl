@@ -178,7 +178,7 @@ class RunLauncher(
         owner: String,
         timeoutMs: Long,
     ): ExecutionRecord? {
-        val settings = record.settings ?: throw ToolException(
+        val recorded = record.settings ?: throw ToolException(
             ErrorCodes.NOT_FOUND,
             "session ${record.sessionId} has no associated run configuration",
             "use run_configuration with an explicit configuration name instead",
@@ -191,9 +191,13 @@ class RunLauncher(
         if (record.state != ExecState.TERMINATED) {
             stop(record, force = false, timeoutMs = timeoutMs)
         }
-        return start(
-            name = settings.name,
-            typeId = settings.type.id,
+        // Prefer a fresh copy from RunManager so external edits to a saved config are picked up.
+        // On-the-fly configs (run_main / run_test) were never added to RunManager and can't be
+        // resolved by name, so fall back to the settings we recorded when the session launched —
+        // that's what makes a run_main session restartable into debug.
+        val settings = findSettings(recorded.name, recorded.type.id) ?: recorded
+        return launch(
+            settings = settings,
             debug = targetDebug,
             owner = owner,
             restartOf = record.sessionId,
@@ -201,6 +205,14 @@ class RunLauncher(
             allowConflict = true, // we just stopped the predecessor
         )
     }
+
+    /** Look up a saved configuration by (name, typeId); null if none is registered (e.g. on-the-fly configs). */
+    private suspend fun findSettings(name: String, typeId: String?): RunnerAndConfigurationSettings? =
+        readAction {
+            RunManager.getInstance(project).allSettings.firstOrNull {
+                it.name == name && (typeId == null || it.type.id == typeId)
+            }
+        }
 
     private suspend fun resolveSettings(name: String, typeId: String?): RunnerAndConfigurationSettings {
         val candidates = readAction {
