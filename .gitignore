@@ -1,5 +1,7 @@
 .gradle/
-build/
+# Anchor to repo root: an unanchored `build/` also matches source packages like
+# src/.../tools/build/ and core/build/, silently un-tracking real code.
+/build/
 .idea/
 *.iml
 out/
