@@ -146,6 +146,6 @@ IdectlBootstrap (ProjectActivity, runs per project)
 
 ## License
 
-[MIT](LICENSE) © 2026 lyd. This plugin is original code; all platform dependencies (IntelliJ
+[MIT](LICENSE) © 2026 NianDUI. This plugin is original code; all platform dependencies (IntelliJ
 Platform, Ktor, kotlinx-coroutines, …) are `compileOnly`, provided by the IDE at runtime, and are
 not distributed with the plugin.

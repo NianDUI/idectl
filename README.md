@@ -143,5 +143,5 @@ IdectlBootstrap (ProjectActivity, 每个项目运行一次)
 
 ## 许可证
 
-[MIT](LICENSE) © 2026 lyd。本插件为原创代码,所有平台依赖(IntelliJ Platform、Ktor、
+[MIT](LICENSE) © 2026 NianDUI。本插件为原创代码,所有平台依赖(IntelliJ Platform、Ktor、
 kotlinx-coroutines 等)均为 `compileOnly`、运行时由 IDE 提供、不随插件分发。
