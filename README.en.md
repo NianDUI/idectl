@@ -141,3 +141,11 @@ IdectlBootstrap (ProjectActivity, runs per project)
 | Instance discovery | `~/.idectl/instances.json` |
 | Audit log | `~/.idectl/audit/*.jsonl` |
 | Console archive (temp) | `<temp>/idectl-console/<sessionId>` |
+
+---
+
+## License
+
+[MIT](LICENSE) © 2026 lyd. This plugin is original code; all platform dependencies (IntelliJ
+Platform, Ktor, kotlinx-coroutines, …) are `compileOnly`, provided by the IDE at runtime, and are
+not distributed with the plugin.

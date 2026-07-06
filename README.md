@@ -138,3 +138,10 @@ IdectlBootstrap (ProjectActivity, 每个项目运行一次)
 | 实例发现 | `~/.idectl/instances.json` |
 | 审计日志 | `~/.idectl/audit/*.jsonl` |
 | 控制台归档(临时) | `<temp>/idectl-console/<sessionId>` |
+
+---
+
+## 许可证
+
+[MIT](LICENSE) © 2026 lyd。本插件为原创代码,所有平台依赖(IntelliJ Platform、Ktor、
+kotlinx-coroutines 等)均为 `compileOnly`、运行时由 IDE 提供、不随插件分发。
