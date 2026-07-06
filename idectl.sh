@@ -17,6 +17,7 @@ idectl —— 构建 / 部署 / 调试 辅助脚本
   build                构建插件 zip → build/distributions/idectl-<版本>.zip
   deploy               构建并安装 / 替换到日常 IntelliJ IDEA（装完需【重启 IDEA】生效）
   run                  启动沙箱 IDE 调试（gradle runIde，不影响日常 IDEA）
+  release <tag>        一键发版：构建 zip → 算 SHA → gh release create（见 scripts/release.sh）
   clean                清理构建产物
   -h, --help           显示本帮助
 
@@ -33,6 +34,7 @@ run 选项：
   ./idectl.sh deploy
   ./idectl.sh deploy --ide-dir "$HOME/Library/Application Support/JetBrains/IntelliJIdea2025.3"
   ./idectl.sh run --token smoketoken123 --project /Users/me/proj
+  git tag -a v1.0.0 -m "本次更新：..." && git push origin v1.0.0 && ./idectl.sh release v1.0.0
 
 说明：
   · deploy 会删掉旧的 plugins/idectl 再解包新版；运行中的 IDE 只在【重启】后加载新版。
@@ -78,6 +80,12 @@ case "$cmd" in
     [ -n "$project" ] && gargs="$gargs -PopenProject=$project"
     # shellcheck disable=SC2086
     ./gradlew runIde $gargs
+    ;;
+
+  release)
+    tag="${1:-}"
+    [ -n "$tag" ] || { echo "release: 需要 tag 参数，如 ./idectl.sh release v1.0.0" >&2; exit 1; }
+    bash scripts/release.sh "$tag"
     ;;
 
   clean)
