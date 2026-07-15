@@ -26,23 +26,32 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 
 /**
- * Ktor CIO embedded server bound to 127.0.0.1 (L1). Single `/mcp` endpoint, Streamable-HTTP:
+ * Ktor CIO embedded server (L1). Single `/mcp` endpoint, Streamable-HTTP:
  * POST carries JSON-RPC; GET is unsupported (405, no server-initiated SSE yet); DELETE ends a session.
+ *
+ * Bind host is loopback (`127.0.0.1`) by default; when the "allow LAN" setting is on it binds the
+ * wildcard (`0.0.0.0`) so peers on the local network can reach it — the Bearer token stays the gate.
  */
 class McpServer(private val app: IdectlService) {
 
     @Volatile var port: Int = -1
         private set
 
+    /** Host the server is bound to: `127.0.0.1` (loopback) or `0.0.0.0` (LAN). */
+    @Volatile var bindHost: String = LOOPBACK
+        private set
+
     private var stopFn: (() -> Unit)? = null
 
     fun start(portBase: Int) {
-        val chosen = findFreePort(portBase, Idectl.PORT_SCAN_LIMIT)
-        val server = embeddedServer(CIO, host = "127.0.0.1", port = chosen) { installRouting() }
+        val host = if (app.settings.allowLan) WILDCARD else LOOPBACK
+        val chosen = findFreePort(host, portBase, Idectl.PORT_SCAN_LIMIT)
+        val server = embeddedServer(CIO, host = host, port = chosen) { installRouting() }
         server.start(wait = false)
         port = chosen
+        bindHost = host
         stopFn = { runCatching { server.stop(500, 1500) } }
-        thisLogger().info("IDE Control server listening on http://127.0.0.1:$chosen/mcp")
+        thisLogger().info("IDE Control server listening on http://$host:$chosen/mcp")
     }
 
     fun stop() {
@@ -148,12 +157,12 @@ class McpServer(private val app: IdectlService) {
         call.respondText(obj.toString(), ContentType.Application.Json, status)
     }
 
-    private fun findFreePort(base: Int, limit: Int): Int {
+    private fun findFreePort(host: String, base: Int, limit: Int): Int {
         for (p in base until base + limit) {
             try {
                 ServerSocket().use {
                     it.reuseAddress = true
-                    it.bind(InetSocketAddress("127.0.0.1", p))
+                    it.bind(InetSocketAddress(host, p))
                 }
                 return p
             } catch (_: Exception) {
@@ -161,5 +170,10 @@ class McpServer(private val app: IdectlService) {
             }
         }
         error("no free port in [$base, ${base + limit})")
+    }
+
+    private companion object {
+        const val LOOPBACK = "127.0.0.1"
+        const val WILDCARD = "0.0.0.0"
     }
 }

@@ -17,6 +17,7 @@ class IdectlConfigurable : Configurable {
     private val settings get() = IdectlSettings.getInstance()
 
     private val enabledCheck = JBCheckBox("启用 IDE Control 服务器")
+    private val allowLanCheck = JBCheckBox("允许局域网访问（绑定 0.0.0.0，供同网段其他机器连接）")
     private val portField = JBTextField(8)
     private val tokenField = JBTextField(36).apply { isEditable = false }
     private val regenerateButton = JButton("重新生成")
@@ -50,9 +51,14 @@ class IdectlConfigurable : Configurable {
         }
         val form = FormBuilder.createFormBuilder()
             .addComponent(enabledCheck)
+            .addComponent(allowLanCheck)
             .addLabeledComponent("基础端口：", portField)
             .addLabeledComponent("访问令牌：", tokenRow)
-            .addComponent(hint("端口 / 启用状态的修改需重启 IDE 后生效；令牌立即生效。"))
+            .addComponent(hint("端口 / 启用 / 局域网开关的修改<b>保存即生效</b>（服务器就地重绑一次、瞬断重连，无需重启 IDE）；令牌立即生效。"))
+            .addComponent(hint("<b>允许局域网</b>后服务器绑定 <code>0.0.0.0</code>，同网段机器可用 " +
+                "<code>http://&lt;本机局域网IP&gt;:端口/mcp</code> 连接（局域网地址见启动通知）。" +
+                "此时仅凭<b>访问令牌</b>鉴权，反 DNS 重绑定校验仅放宽到私有网段——" +
+                "请<b>妥善保管令牌、只在可信局域网启用</b>；macOS 可能弹防火墙放行框。默认关闭（仅本机 127.0.0.1）。"))
             .addSeparator()
             .addComponent(JBLabel("一键接入 Agent（用当前访问令牌 + 端口写入对方的 MCP 配置，按钮即时生效）"))
             .addComponent(agentSetup.component())
@@ -93,6 +99,7 @@ class IdectlConfigurable : Configurable {
 
     override fun isModified(): Boolean =
         enabledCheck.isSelected != settings.enabled ||
+            allowLanCheck.isSelected != settings.allowLan ||
             portField.text.trim() != settings.portBase.toString() ||
             tokenField.text != (settings.token ?: "") ||
             memoryLinesField.text.trim() != settings.consoleMemoryLines.toString() ||
@@ -104,7 +111,15 @@ class IdectlConfigurable : Configurable {
             toolPolicy.isModified()
 
     override fun apply() {
+        // Anything that changes the bound socket (host or port, or turning the server on/off) triggers
+        // a live re-bind below, so the change takes effect without an IDE restart.
+        val newPort = portField.text.trim().toIntOrNull() ?: settings.portBase
+        val rebindServer = enabledCheck.isSelected != settings.enabled ||
+            allowLanCheck.isSelected != settings.allowLan ||
+            newPort != settings.portBase
+
         settings.enabled = enabledCheck.isSelected
+        settings.allowLan = allowLanCheck.isSelected
         portField.text.trim().toIntOrNull()?.let { settings.portBase = it }
         if (tokenField.text.isNotBlank()) settings.token = tokenField.text.trim()
         memoryLinesField.text.trim().toIntOrNull()?.let { settings.consoleMemoryLines = it.coerceAtLeast(100) }
@@ -114,10 +129,13 @@ class IdectlConfigurable : Configurable {
         approvalTimeoutField.text.trim().toIntOrNull()?.let { settings.approvalTimeoutSec = it.coerceIn(5, 3600) }
         tokenTable.apply(settings)
         toolPolicy.apply(settings)
+
+        if (rebindServer) IdectlService.getInstance().restartServer()
     }
 
     override fun reset() {
         enabledCheck.isSelected = settings.enabled
+        allowLanCheck.isSelected = settings.allowLan
         portField.text = settings.portBase.toString()
         tokenField.text = settings.token ?: ""
         memoryLinesField.text = settings.consoleMemoryLines.toString()

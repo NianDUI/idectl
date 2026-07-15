@@ -41,6 +41,11 @@ class IdectlSettings : SimplePersistentStateComponent<IdectlSettings.State>(Stat
         var portBase: Int by property(com.niandui.idectl.Idectl.PORT_BASE)
         var token: String? by string()
 
+        // Bind the server to 0.0.0.0 (LAN-reachable) instead of loopback-only. Off by default:
+        // the localhost bind is the primary reachability fence. When on, the anti-DNS-rebinding
+        // Host/Origin fence is relaxed for private-range peers and the Bearer token is the gate.
+        var allowLan: Boolean by property(false)
+
         // Console buffering (core②). Frugal on RAM: the memory ring stays small and evicted lines
         // spill to a bounded on-disk archive (≈0 heap cost) instead of forcing a bigger RAM buffer
         // to retain history — so archive defaults ON. Disk is bounded + freed on session eviction.
@@ -65,6 +70,11 @@ class IdectlSettings : SimplePersistentStateComponent<IdectlSettings.State>(Stat
     var portBase: Int
         get() = state.portBase
         set(value) { state.portBase = value }
+
+    /** Bind on 0.0.0.0 so LAN peers can reach the server; the settings page re-binds live on change. */
+    var allowLan: Boolean
+        get() = state.allowLan
+        set(value) { state.allowLan = value }
 
     var token: String?
         get() = state.token

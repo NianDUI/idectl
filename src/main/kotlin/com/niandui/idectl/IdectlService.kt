@@ -4,6 +4,7 @@ import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationInfo
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
@@ -67,7 +68,7 @@ class IdectlService(val scope: CoroutineScope) : Disposable {
 
     val tokenStore = TokenStore(settings)
     val sessions = SessionManager()
-    val authGate = AuthGate(tokenStore)
+    val authGate = AuthGate(tokenStore) { settings.allowLan }
     val registry = ToolRegistry()
     val gate = ToolGate(this)
     val adapter = McpTransportAdapter(this)
@@ -142,6 +143,43 @@ class IdectlService(val scope: CoroutineScope) : Disposable {
         if (started.get()) updateInstances()
     }
 
+    /**
+     * Re-bind the server so a changed `allowLan` / `portBase` / `enabled` takes effect WITHOUT an IDE
+     * restart. The bind host is decided in [McpServer.start], so we stop the old socket and start a
+     * fresh one against the current settings. Sessions live in [sessions] (independent of the socket),
+     * so already-connected agents keep their session and simply reconnect on their next POST.
+     *
+     * Called from the settings page after [IdectlSettings] is written. Runs the stop/start off the EDT
+     * because [McpServer.stop] blocks on Ktor's graceful-shutdown window.
+     */
+    fun restartServer() {
+        // Disabled now → tear the running server down and stop advertising it.
+        if (!settings.enabled) {
+            if (started.getAndSet(false)) {
+                runCatching { server.stop() }
+                runCatching { instances.unregister() }
+            }
+            return
+        }
+        // Never started yet (e.g. no project opened) → the normal first-start path reads new settings.
+        if (!started.get()) {
+            ensureStarted()
+            return
+        }
+        ApplicationManager.getApplication().executeOnPooledThread {
+            runCatching { server.stop() }
+            try {
+                val token = tokenStore.ensureToken()
+                server.start(settings.portBase)
+                updateInstances()
+                notifyReady(token)
+            } catch (t: Throwable) {
+                started.set(false)
+                thisLogger().error("failed to rebind idectl server", t)
+            }
+        }
+    }
+
     private fun updateInstances() {
         val ide = ApplicationInfo.getInstance().fullVersion
         val projects = ProjectResolver.openProjects().mapNotNull { it.basePath }
@@ -151,15 +189,32 @@ class IdectlService(val scope: CoroutineScope) : Disposable {
     private fun notifyReady(token: String) {
         val cmd = "claude mcp add --transport http idectl " +
             "http://127.0.0.1:${server.port}/mcp --header \"Authorization: Bearer $token\""
+        val body = buildString {
+            append("已监听端口 ${server.port}。连接命令：\n$cmd")
+            if (settings.allowLan) {
+                append("\n\n已开启局域网访问（绑定 0.0.0.0）。局域网内其他机器可用：")
+                val lan = lanUrls()
+                if (lan.isEmpty()) append("\nhttp://<本机局域网IP>:${server.port}/mcp")
+                else lan.forEach { append("\n$it") }
+            }
+        }
         NotificationGroupManager.getInstance()
             .getNotificationGroup("IDE Control")
-            .createNotification(
-                "IDE Control 服务器已启动",
-                "已监听端口 ${server.port}。连接命令：\n$cmd",
-                NotificationType.INFORMATION,
-            )
+            .createNotification("IDE Control 服务器已启动", body, NotificationType.INFORMATION)
             .notify(null)
     }
+
+    /** Best-effort list of this machine's private-range IPv4 `/mcp` URLs, for LAN peers to connect. */
+    private fun lanUrls(): List<String> = runCatching {
+        java.net.NetworkInterface.getNetworkInterfaces().asSequence()
+            .filter { it.isUp && !it.isLoopback && !it.isVirtual }
+            .flatMap { it.inetAddresses.asSequence() }
+            .filterIsInstance<java.net.Inet4Address>()
+            .filter { it.isSiteLocalAddress }
+            .map { "http://${it.hostAddress}:${server.port}/mcp" }
+            .distinct()
+            .toList()
+    }.getOrDefault(emptyList())
 
     override fun dispose() {
         runCatching { server.stop() }
